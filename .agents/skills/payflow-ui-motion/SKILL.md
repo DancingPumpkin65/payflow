@@ -50,6 +50,10 @@ Android specialist skills for platform details. These are the user's two
     spring-based morphing for workday range selection, + expansion and Worked
     toggle only. Use connected necks, restrained stretching and surface tension
     there; keep held range geometry directly finger-driven.
+    For ranges, morph only the newly entered pair, then separate within 280ms
+    even while held. Never leave all selected days joined. Limit preview and
+    commits to the displayed month. Expense category dropdowns belong only in
+    the add/edit form; the main list shows both categories.
 14. Held/dragged controls follow the finger directly, without tween lag.
 15. Exits are 20% shorter than entrances.
 16. Overlap outgoing/incoming screens instead of replacing them instantly.

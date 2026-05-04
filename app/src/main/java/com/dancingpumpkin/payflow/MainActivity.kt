@@ -16,21 +16,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.Animatable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -91,9 +84,7 @@ class MainActivity : ComponentActivity() {
 private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
 
 @Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
-    val launchOpacity = remember { Animatable(0f) }
     val state by viewModel.state.collectAsState()
-    LaunchedEffect(state.loaded) { if (state.loaded) launchOpacity.animateTo(1f, tween(220, easing = LinearOutSlowInEasing)) }
     var destination by rememberSaveable { mutableStateOf(Destination.CALENDAR) }
     val savedScreens = rememberSaveableStateHolder()
     val typography = remember {
@@ -122,13 +113,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
         error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
     ), typography = typography) {
         Surface(color = Black, modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            if (!state.loaded) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(painterResource(R.drawable.ic_payflow), null, modifier = Modifier.size(108.dp))
-                Text("Payflow", style = MaterialTheme.typography.titleLarge, color = Ink)
-                Spacer(Modifier.height(24.dp))
-                CircularProgressIndicator(Modifier.size(24.dp), color = Accent, strokeWidth = 2.dp)
-                Text("Opening your calendar", style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 12.dp))
-            } else Box(Modifier.fillMaxSize().graphicsLayer { alpha = launchOpacity.value }) {
+            Box(Modifier.fillMaxSize()) {
             AnimatedContent(destination, modifier = Modifier.fillMaxSize(), transitionSpec = {
                 val direction = if (targetState == Destination.CALENDAR) -1 else 1
                 (fadeIn(tween(300, easing = LinearOutSlowInEasing)) + slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { direction * it / 12 }) togetherWith
@@ -167,21 +152,19 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
 }
 
 @Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long, String) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
-    var category by rememberSaveable { mutableStateOf("personal") }
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     val editing = expenses.firstOrNull { it.id == editingId }
     editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents, type -> update(record.copy(date = date, title = title, amountCents = cents, category = type)); editingId = null }, { editingId = null }) }
     var showDialog by rememberSaveable { mutableStateOf(false) }
     SimpleScreen("Expenses", back, { showDialog = true }) {
-        ExpenseCategoryPicker(category) { category = it }
-        expenses.filter { it.category == category }.forEach { expense ->
+        expenses.forEach { expense ->
             key(expense.id) {
-                RecordCard(expense.title, displayDate(expense.date), amount = money(expense.amountCents), kind = "expense", edit = { editingId = expense.id }, delete = { delete(expense) })
+                RecordCard(expense.title, "${displayDate(expense.date)} · ${if (expense.category == "shop") "Shop" else "Personal"}", amount = money(expense.amountCents), kind = "expense", edit = { editingId = expense.id }, delete = { delete(expense) })
             }
         }
-        if (expenses.none { it.category == category }) Text("No ${if (category == "shop") "shop" else "personal"} expenses yet.", color = Muted, modifier = Modifier.padding(top = 16.dp))
+        if (expenses.isEmpty()) Text("No expenses yet.", color = Muted, modifier = Modifier.padding(top = 16.dp))
     }
-    if (showDialog) ExpenseDialog(category, { date, title, amount, type -> add(date, title, amount, type); showDialog = false }, { showDialog = false })
+    if (showDialog) ExpenseDialog("personal", { date, title, amount, type -> add(date, title, amount, type); showDialog = false }, { showDialog = false })
 }
 
 @Composable private fun SimpleScreen(title: String, back: () -> Unit, add: () -> Unit, content: @Composable () -> Unit) {

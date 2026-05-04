@@ -1,17 +1,19 @@
 # Expense ledgers and liquid interactions
 
-Expenses now have a persisted Personal or Shop category. The list's dropdown
-filters the ledger, and + defaults to that selected ledger. The same dropdown
-in add/edit can move a record between ledgers without changing its ID. Work-pay
+Expenses now have a persisted Personal or Shop category. The dropdown appears
+only in add/edit and can move a record between ledgers without changing its ID.
+The main list shows both ledgers with a small category label; + starts Personal.
+Work-pay
 totals subtract only Personal expenses; Shop revenue subtracts only Shop
 expenses. Room version 3 migrates older expenses to Personal with a non-null
 default and preserves every existing field.
 
 The user's explicit liquid-motion request applies to three controls:
 
-- Long-press workday ranges draw pinched, curved connections between adjacent
-  selected dates within each week. The leading date stretches 12%; the range
-  follows the finger directly and connections relax away on release. Cancellation
+- Long-press workday ranges briefly merge only the latest adjacent pair, with a
+  280ms squish-and-separate pulse. Connections disappear while the finger is
+  still held; selected dates do not form persistent chains. Selection is limited
+  to the displayed month, including both preview and commit. Cancellation
   removes the preview without saving. Week boundaries never draw across unrelated
   rows.
 - The + actions grow from their origin through temporary curved necks, stretch
@@ -22,11 +24,13 @@ The user's explicit liquid-motion request applies to three controls:
 
 The effects use Canvas paths and native Compose springs rather than blur or
 external animation dependencies. Navigation keeps its existing slide/fade.
-System animation-duration scaling remains supported.
+System animation-duration scaling remains supported. The custom startup logo,
+spinner, loading text and entrance fade are removed; the calendar renders
+immediately, with workday mutations enabled once stored data is available.
 
 ## Verification
 
-- Local unit/lint/debug checks pass: 13 tests, no failures, no lint errors.
+- Local unit/lint/debug checks pass: 15 tests, no failures, no lint errors.
   The added calculation test proves Personal and Shop spending do not mix.
 - On the API 37 emulator, upgraded a version-2 database containing a 12.34 DH
   expense. Room validated the version-3 schema; the record retained its ID,
@@ -42,3 +46,13 @@ System animation-duration scaling remains supported.
   was connected; captures are under `app/build/outputs/liquid-review/`.
 - Sampling proves intermediate geometry, not a measured frame rate. Full
   TalkBack speech and real-phone performance remain unverified for this pass.
+
+## Range refinement checks
+
+On the API 37 emulator, explicit held touch events captured the anchor circle,
+the adjacent pair merging, and two separate selected circles before touch-up.
+An out-of-month long press left all tables unchanged. Starting on January 1
+and dragging back into December changed only January 1. Two new calculation
+tests cover both ends of a displayed month's boundary. The main expense list
+had no dropdown, while New expense retained it. Original records and animation
+scale were restored after testing; all five table hashes match.
