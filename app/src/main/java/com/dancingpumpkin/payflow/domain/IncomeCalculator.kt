@@ -11,7 +11,7 @@ data class Totals(val earnedCents: Long, val spentCents: Long) {
 object IncomeCalculator {
     fun totals(workDays: List<WorkDayEntity>, rates: List<PayRateEntity>, expenses: List<ExpenseEntity>): Totals {
         val earned = workDays.sumOf { day -> rates.lastOrNull { it.effectiveDate <= day.date }?.dailyAmountCents ?: 0L }
-        return Totals(earned, expenses.sumOf(ExpenseEntity::amountCents))
+        return Totals(earned, expenses.filter { it.category == "personal" }.sumOf(ExpenseEntity::amountCents))
     }
 
     fun earnedForMonth(workDays: List<WorkDayEntity>, rates: List<PayRateEntity>, monthPrefix: String): Long =

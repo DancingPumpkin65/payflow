@@ -55,9 +55,10 @@ internal fun DashboardScreen(state: PayflowState, back: () -> Unit) {
                 monthlyStats(month, state.workDays, state.rates, state.expenses, state.shopIncome)
             }
             val income = if (shop) stats.revenue else stats.workPay
-            val net = income - stats.expenses
+            val spending = if (shop) stats.shopExpenses else stats.expenses
+            val net = income - spending
             val motion = remember { Animatable(0f) }
-            LaunchedEffect(page == pager.settledPage, shop, income, stats.expenses) {
+            LaunchedEffect(page == pager.settledPage, shop, income, spending) {
                 motion.snapTo(0f)
                 if (page == pager.settledPage) motion.animateTo(1f, tween(650, easing = LinearOutSlowInEasing))
             }
@@ -68,9 +69,9 @@ internal fun DashboardScreen(state: PayflowState, back: () -> Unit) {
                         Text(if (shop) "REVENUE" else "WORK PAY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(dashboardMoney(income), style = MaterialTheme.typography.headlineMedium)
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                            val basis = maxOf(income, stats.expenses)
-                            val spent = if (basis == 0L) 0f else stats.expenses.toFloat() / basis
-                            Canvas(Modifier.size(116.dp).semantics { contentDescription = "Expenses ${dashboardMoney(stats.expenses)}; net ${dashboardMoney(net)}" }) {
+                            val basis = maxOf(income, spending)
+                            val spent = if (basis == 0L) 0f else spending.toFloat() / basis
+                            Canvas(Modifier.size(116.dp).semantics { contentDescription = "Expenses ${dashboardMoney(spending)}; net ${dashboardMoney(net)}" }) {
                                 val stroke = 14.dp.toPx()
                                 val inset = stroke / 2
                                 val arcSize = Size(size.width - stroke, size.height - stroke)
@@ -81,25 +82,25 @@ internal fun DashboardScreen(state: PayflowState, back: () -> Unit) {
                                 }
                             }
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                StatLegend("Expenses", stats.expenses, ExpenseCoral)
+                                StatLegend("Expenses", spending, ExpenseCoral)
                                 StatLegend("Net", net, if (net < 0) ExpenseCoral else RetainedTeal)
                             }
                         }
-                        if (income == 0L && stats.expenses == 0L) Text("No records this month", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                        if (income == 0L && spending == 0L) Text("No records this month", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("DAILY TOTALS", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        val max = stats.days.maxOf { maxOf(if (shop) it.revenue else it.workPay, it.expenses) }
+                        val max = stats.days.maxOf { maxOf(if (shop) it.revenue else it.workPay, if (shop) it.shopExpenses else it.expenses) }
                         Text(dashboardMoney(max), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    val max = stats.days.maxOf { maxOf(if (shop) it.revenue else it.workPay, it.expenses) }.coerceAtLeast(1)
-                    Canvas(Modifier.fillMaxWidth().height(144.dp).semantics { contentDescription = "Daily ${if (shop) "revenue" else "work pay"} in blue and expenses in coral, ${month.lengthOfMonth()} days. Total ${dashboardMoney(income)}, expenses ${dashboardMoney(stats.expenses)}." }) {
+                    val max = stats.days.maxOf { maxOf(if (shop) it.revenue else it.workPay, if (shop) it.shopExpenses else it.expenses) }.coerceAtLeast(1)
+                    Canvas(Modifier.fillMaxWidth().height(144.dp).semantics { contentDescription = "Daily ${if (shop) "revenue" else "work pay"} in blue and expenses in coral, ${month.lengthOfMonth()} days. Total ${dashboardMoney(income)}, expenses ${dashboardMoney(spending)}." }) {
                         val cell = size.width / stats.days.size
                         drawLine(Color(0xFF414246), Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx())
                         stats.days.forEachIndexed { index, day ->
-                            listOf((if (shop) day.revenue else day.workPay) to RevenueBlue, day.expenses to ExpenseCoral).forEachIndexed { series, (amount, color) ->
+                            listOf((if (shop) day.revenue else day.workPay) to RevenueBlue, (if (shop) day.shopExpenses else day.expenses) to ExpenseCoral).forEachIndexed { series, (amount, color) ->
                                 val height = (amount.toDouble() / max * size.height * motion.value).toFloat()
                                 if (height > 0) drawRoundRect(color, Offset(index * cell + cell * (.08f + series * .44f), size.height - height), Size(cell * .34f, height), androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx()))
                             }

@@ -2,6 +2,7 @@ package com.dancingpumpkin.payflow.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 
 @Entity(tableName = "work_days")
 data class WorkDayEntity(@PrimaryKey val date: String)
@@ -25,4 +26,5 @@ data class ExpenseEntity(
     val date: String,
     val title: String,
     val amountCents: Long,
+    @ColumnInfo(defaultValue = "'personal'") val category: String = "personal",
 )

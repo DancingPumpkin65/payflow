@@ -6,6 +6,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class MonthlyStatsTest {
+    @Test fun `personal and shop expenses stay in separate ledgers`() {
+        val expenses = listOf(ExpenseEntity(1, "2026-11-15", "Personal", 1234), ExpenseEntity(2, "2026-11-15", "Shop", 5678, "shop"))
+        val stats = monthlyStats(YearMonth.of(2026, 11), emptyList(), emptyList(), expenses, emptyList())
+        assertEquals(1234L, stats.expenses)
+        assertEquals(5678L, stats.shopExpenses)
+        assertEquals(1234L, IncomeCalculator.totals(emptyList(), emptyList(), expenses).spentCents)
+    }
     @Test fun `monthly data respects date boundaries and historical rates without mixing shop revenue`() {
         val stats = monthlyStats(YearMonth.of(2026, 11),
             listOf(WorkDayEntity("2026-10-31"), WorkDayEntity("2026-11-01"), WorkDayEntity("2026-11-15")),
