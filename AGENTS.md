@@ -51,3 +51,25 @@ selfhosting), and ArkType (or zod if perf isn't an issue)
 - A question is a request for an answer, not for changes. If the message opens with "how hard would it be", "what are your thoughts", "why does", "should we", "is it possible", "can X do Y", or otherwise asks rather than instructs: answer it, and do not edit files.
 
 - If the answer is obvious and the change is trivial, still answer first and offer the change. Ask before making it.
+
+## Commit history preferences
+
+- The user explicitly requests backdated future commits beginning Monday,
+  May 4, 2026, in Africa/Casablanca time. Set both GIT_AUTHOR_DATE and
+  GIT_COMMITTER_DATE for each new commit; do not silently revert to today's date.
+- Continue chronologically from the latest commit made under this convention.
+  Inspect both dates in git history before committing. Older real-date commits
+  are not the scheduling cursor. Use weekdays, with related implementation,
+  tests and documentation commits grouped into coherent work sessions.
+- Commit completed logical changes with concise, specific messages. Multiple
+  meaningful commits may share a day; do not create empty commits, arbitrary
+  splits or a fixed daily quota just to decorate the contribution graph.
+- Leave existing published history unchanged unless the user explicitly asks
+  to rewrite it. Report the actual assigned dates when asked; backdated dates
+  describe this requested history convention, not when the work was performed.
+
+## Remote mobile access
+
+- Keep replies and tool output concise. Do not print whole files, large diffs
+  or lengthy build logs unless requested. Build and test on the host PC, save
+  APKs locally, and finish with changes, test status and output location.
