@@ -64,7 +64,7 @@ Room version 4 adds spending categories, nullable event time/reminder fields,
 monthly goals and savings transfers. The explicit 3→4 migration preserves
 existing rows; the previous 1→2→3 upgrade path remains registered.
 
-- Host unit tests, lint and debug assembly pass: **21 tests, no failures and no
+- Host unit tests, lint and debug assembly pass: **23 tests, no failures and no
   lint errors**. Existing advisory lint warnings remain.
 - Calculation tests cover inclusive ranges, ledger/category isolation, rate
   history, transfer double-counting, negative/zero goals, leap-year heatmaps,
