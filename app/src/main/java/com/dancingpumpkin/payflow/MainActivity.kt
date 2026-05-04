@@ -106,7 +106,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     }
 }
 
-@Composable private fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit) {
+@Composable private fun LegacyCalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit) {
     var monthIndex by rememberSaveable { mutableStateOf(YearMonth.now().year * 12 + YearMonth.now().monthValue - 1) }
     val month = YearMonth.of(Math.floorDiv(monthIndex, 12), Math.floorMod(monthIndex, 12) + 1)
     var yearMode by rememberSaveable { mutableStateOf(false) }
