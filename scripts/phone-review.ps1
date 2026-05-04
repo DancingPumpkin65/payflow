@@ -19,7 +19,7 @@ function Read-ReviewScreen {
 $screen = Read-ReviewScreen
 if (-not $screen.SelectSingleNode('//node[@package="com.dancingpumpkin.payflow"]')) { throw 'Payflow must be visible before review input.' }
 if ($Text -or $Description) {
-    $matches = @($screen.SelectNodes('//node') | Where-Object {
+    $matches = @($screen.SelectNodes('//node[@bounds!="[0,0][0,0]"]') | Where-Object {
         if ($Text) { $_.GetAttribute('text') -eq $Text } else { $_.GetAttribute('content-desc') -eq $Description }
     })
     if ($matches.Count -ne 1) { throw "Expected one control, found $($matches.Count)." }

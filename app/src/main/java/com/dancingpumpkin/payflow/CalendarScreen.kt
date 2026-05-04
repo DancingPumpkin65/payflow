@@ -1,222 +1,439 @@
 package com.dancingpumpkin.payflow
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDropUp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.DayOfWeek
+import java.time.temporal.WeekFields
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-private val CalendarAccent = Color(0xFFC9A46A)
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.dancingpumpkin.payflow.domain.workDayRange
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ripple
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import com.dancingpumpkin.payflow.data.DayEventEntity
+
+private val CalendarAccent = Color(0xFF72A7FF)
 private val CalendarInk = Color(0xFFF6F4F0)
 private val CalendarMuted = Color(0xFFA5A19B)
 
-@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
+private fun monthIndex(month: YearMonth) = (month.year - 1900) * 12 + month.monthValue - 1
+private fun monthAt(index: Int) = YearMonth.of(1900 + index / 12, index % 12 + 1)
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit) {
+internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit, openDashboard: () -> Unit) {
     val now = YearMonth.now()
-    val base = 1900 * 12
-    val pager = rememberPagerState(initialPage = now.year * 12 + now.monthValue - 1 - base, pageCount = { 2400 })
+    val pager = rememberPagerState(initialPage = monthIndex(now), pageCount = { 2400 })
     var yearMode by rememberSaveable { mutableStateOf(false) }
     var selectedIndex by rememberSaveable { mutableIntStateOf(pager.currentPage) }
-    var year by rememberSaveable { mutableIntStateOf(now.year) }
+    val yearPager = rememberPagerState(initialPage = now.year - 1900, pageCount = { 200 })
+    val year = 1900 + yearPager.currentPage
     var selectedDate by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
-    var showDay by rememberSaveable { mutableStateOf(false) }
+    var editor by rememberSaveable { mutableStateOf<DayEntryTab?>(null) }
+    var editingEventId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val searchProgress = remember { Animatable(if (searchOpen) 1f else 0f) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    fun closeSearch() { searchOpen = false; searchQuery = ""; focusManager.clearFocus(); keyboard?.hide() }
+    LaunchedEffect(searchOpen) { searchProgress.animateTo(if (searchOpen) 1f else 0f, tween(if (searchOpen) 220 else 176, easing = LinearOutSlowInEasing)) }
+    var showActions by rememberSaveable { mutableStateOf(false) }
+    var rangeSelecting by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val yearColumns = if (LocalConfiguration.current.screenWidthDp < 400 || LocalDensity.current.fontScale > 1.15f) 2 else 3
-    val selectedMonthPosition = remember { BringIntoViewRequester() }
-    val month = YearMonth.of((base + pager.currentPage) / 12, (base + pager.currentPage) % 12 + 1)
-    val totals = viewModel.totals()
+    val density = LocalDensity.current
+    val columns = 3
+    val month = monthAt(pager.currentPage)
     val worked = remember(state.workDays) { state.workDays.map { it.date }.toSet() }
+    val progress = remember { Animatable(if (yearMode) 0f else 1f) }
+    val agendaProgress = remember { Animatable(if (yearMode) 0f else 1f) }
+    val agendaVisible by remember { derivedStateOf { agendaProgress.value > 0f } }
+    val thumbnails = remember { mutableMapOf<Int, Rect>() }
+    var gridBounds by remember { mutableStateOf(Rect.Zero) }
+    var yearBounds by remember { mutableStateOf(Rect.Zero) }
+    var summaryHeight by remember { mutableIntStateOf(0) }
+    var headerHeight by remember { mutableIntStateOf(0) }
+    val yearScroll = rememberScrollState()
+    val monthEnabled = !yearMode && !progress.isRunning && !searchOpen
+    val yearEnabled = yearMode && !progress.isRunning && !searchOpen
+    LaunchedEffect(yearMode) {
+        showActions = false
+        launch { agendaProgress.animateTo(if (yearMode) 0f else 1f, tween(if (yearMode) 256 else 320, easing = if (yearMode) FastOutLinearInEasing else LinearOutSlowInEasing)) }
+        progress.animateTo(if (yearMode) 0f else 1f, tween(if (yearMode) 256 else 320, easing = FastOutSlowInEasing))
+    }
     LaunchedEffect(pager.settledPage) {
-        val visible = YearMonth.of((base + pager.settledPage) / 12, (base + pager.settledPage) % 12 + 1)
+        val visible = monthAt(pager.settledPage)
         if (YearMonth.from(LocalDate.parse(selectedDate)) != visible) selectedDate = visible.atDay(1).toString()
     }
     BackHandler(yearMode) { yearMode = false }
-    if (showDay) DayDetailsSheet(LocalDate.parse(selectedDate), state, viewModel) { showDay = false }
+    BackHandler(showActions) { showActions = false }
+    BackHandler(searchOpen) { closeSearch() }
+    fun editEvent(event: DayEventEntity) {
+        if (searchOpen) { focusManager.clearFocus(); keyboard?.hide() } else closeSearch()
+        yearMode = false
+        editingEventId = event.id
+        selectedDate = event.date
+        pager.requestScrollToPage(monthIndex(YearMonth.from(LocalDate.parse(event.date))))
+        editor = DayEntryTab.EVENT
+    }
+    editor?.let { destination -> DayEntryEditor(LocalDate.parse(selectedDate), state, viewModel, destination, state.events.firstOrNull { it.id == editingEventId }) { editor = null; editingEventId = null } }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (yearMode) year.toString() else month.format(DateTimeFormatter.ofPattern("MMM yyyy")),
-                style = MaterialTheme.typography.titleLarge,
-                color = CalendarInk,
-                modifier = Modifier.weight(1f).clickable {
-                    selectedIndex = pager.currentPage
-                    year = month.year
-                    scope.launch { withFrameNanos { }; yearMode = !yearMode }
-                }.padding(vertical = 12.dp).semantics { role = Role.Button; contentDescription = "Choose month and year" },
-            )
-            if (!yearMode) Column(horizontalAlignment = Alignment.End) {
-                Text(formatDh(viewModel.earnedForMonth(month.toString())), color = CalendarAccent, style = MaterialTheme.typography.titleMedium)
-                Text("Month earned", color = CalendarMuted, style = MaterialTheme.typography.labelSmall)
-            }
-            Box {
-                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Menu") }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(text = { Text("Day details · ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMM yyyy"))}") }, onClick = { showMenu = false; showDay = true })
-                    DropdownMenuItem(text = { Text("Pay rates") }, onClick = { showMenu = false; openRates() })
-                    DropdownMenuItem(text = { Text("Expenses") }, onClick = { showMenu = false; openExpenses() })
-                    DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base); selectedDate = LocalDate.now().toString() }; yearMode = false })
+    BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
+        val weekHeight = with(density) { 14.sp.toDp() } + 8.dp
+        val toolbarHeight = with(density) { headerHeight.toDp() }.coerceAtLeast(56.dp)
+        val pageHeight = maxOf(maxHeight, toolbarHeight + weekHeight + 288.dp + 80.dp + with(density) { summaryHeight.toDp() })
+        val yearHeight = (maxHeight - toolbarHeight).coerceAtLeast(120.dp)
+        fun chooseYear() {
+            if (progress.isRunning) return
+            if (yearMode) { yearMode = false; return }
+            selectedIndex = pager.currentPage
+            yearPager.requestScrollToPage(month.year - 1900)
+            scope.launch {
+                withFrameNanos { }
+                val thumb = thumbnails[selectedIndex]
+                val margin = with(density) { 8.dp.toPx() }
+                if (thumb != null) {
+                    val delta = when {
+                        thumb.bottom > yearBounds.bottom - margin -> thumb.bottom - yearBounds.bottom + margin
+                        thumb.top < yearBounds.top + margin -> thumb.top - yearBounds.top - margin
+                        else -> 0f
+                    }
+                    yearScroll.scrollBy(delta)
                 }
+                withFrameNanos { }
+                yearMode = true
             }
         }
-        SharedTransitionLayout(Modifier.weight(1f).fillMaxWidth()) {
-            AnimatedContent(yearMode, label = "Calendar hierarchy") { overview ->
-                if (overview) {
-                    LaunchedEffect(year, selectedIndex) {
-                        withFrameNanos { }
-                        if (year == (base + selectedIndex) / 12) selectedMonthPosition.bringIntoView()
-                    }
-                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            TextButton(onClick = { if (year > 1900) year-- }) { Text("‹ ${year - 1}", color = CalendarMuted) }
-                            TextButton(onClick = { if (year < 2099) year++ }) { Text("${year + 1} ›", color = CalendarMuted) }
+        // Short windows scroll the page instead of compressing date touch targets.
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState(), enabled = !rangeSelecting).then(if (searchOpen && searchQuery.isNotBlank()) Modifier.clearAndSetSemantics { } else Modifier)) {
+            Column(Modifier.fillMaxWidth().height(pageHeight).padding(horizontal = 12.dp)) {
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp).heightIn(min = 56.dp).onSizeChanged { headerHeight = it.height }.graphicsLayer { alpha = 1f - searchProgress.value; translationY = -12.dp.toPx() * searchProgress.value }.then(if (searchOpen) Modifier.clearAndSetSemantics { } else Modifier), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f).clickable(enabled = !searchOpen, onClick = ::chooseYear).heightIn(min = 48.dp).semantics {
+                        role = Role.Button
+                        contentDescription = "Choose month and year"
+                    }, verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (yearMode) year.toString() else month.format(DateTimeFormatter.ofPattern("MMM yyyy")), color = CalendarInk, style = MaterialTheme.typography.titleLarge)
+                        RoundedArrow(if (yearMode) ArrowDirection.UP else ArrowDirection.DOWN)
                         }
-                        repeat(12 / yearColumns) { row ->
+                        }
+                    }
+                    IconButton(enabled = !searchOpen && !progress.isRunning, onClick = { showActions = false; showMenu = false; searchOpen = true }) { Icon(Icons.Default.Search, "Search events", modifier = Modifier.size(28.dp)) }
+                    Box {
+                        IconButton(enabled = !searchOpen, onClick = { showMenu = true }) { CalendarMenuIcon() }
+                        CalendarOverflowMenu(showMenu, { showMenu = false }, openRates, openExpenses, openDashboard)
+                    }
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    // Keep both endpoints measured. Only the month layer moves, so
+                    // neither lazy composition nor parent reflow stalls the first frame.
+                    Column(Modifier.fillMaxWidth().height(yearHeight).onGloballyPositioned { yearBounds = Rect(it.positionInRoot(), it.size.toSize()) }.zIndex(if (yearEnabled) 2f else 0f).graphicsLayer { alpha = 1f - progress.value }
+                        .then(if (!yearMode) Modifier.clearAndSetSemantics { } else Modifier)) {
+                        HorizontalPager(yearPager, userScrollEnabled = yearEnabled, modifier = Modifier.fillMaxSize()) { yearPage ->
+                        Column(Modifier.fillMaxSize().verticalScroll(yearScroll, enabled = yearEnabled)) {
+                        repeat(12 / columns) { row ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                repeat(yearColumns) { column ->
-                                    val item = YearMonth.of(year, row * yearColumns + column + 1)
-                                    val index = item.year * 12 + item.monthValue - 1 - base
-                                    Column(Modifier.weight(1f).padding(vertical = 8.dp).then(if (index == selectedIndex) Modifier.bringIntoViewRequester(selectedMonthPosition).sharedBounds(
-                                        rememberSharedContentState("month-$index"), this@AnimatedContent,
-                                        boundsTransform = { _, _ -> tween(300) },
-                                    ) else Modifier).clickable {
-                                        selectedIndex = index
-                                        scope.launch {
-                                            // Let the selected thumbnail register its shared bounds before it exits.
-                                            withFrameNanos { }
-                                            pager.scrollToPage(index)
-                                            withFrameNanos { }
-                                            yearMode = false
-                                        }
-                                    }) {
-                                        Text(item.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()), color = if (item == month) CalendarAccent else CalendarInk, style = MaterialTheme.typography.labelLarge)
+                                repeat(columns) { column ->
+                                    val item = YearMonth.of(1900 + yearPage, row * columns + column + 1)
+                                    val index = monthIndex(item)
+                                    Column(Modifier.weight(1f).onGloballyPositioned { thumbnails[index] = Rect(it.positionInRoot(), it.size.toSize()) }
+                                        .padding(vertical = 6.dp).clickable(enabled = yearEnabled) {
+                                            selectedIndex = index
+                                            scope.launch {
+                                                pager.requestScrollToPage(index)
+                                                withFrameNanos { }
+                                                withFrameNanos { }
+                                                yearMode = false
+                                            }
+                                        }.semantics {
+                                            contentDescription = "${item.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${item.year}"
+                                            role = Role.Button
+                                            selected = item == month
+                                            val count = worked.count { it.startsWith(item.toString()) }
+                                            stateDescription = if (count == 1) "1 worked day" else "$count worked days"
+                                        }.border(if (item == month) 1.dp else 0.dp, if (item == month) CalendarAccent else Color.Transparent, MaterialTheme.shapes.small).padding(4.dp)) {
+                                        Text(item.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(Locale.getDefault()), color = if (item == month) CalendarAccent else CalendarInk, style = MaterialTheme.typography.labelLarge)
                                         MiniMonth(item, worked)
                                     }
                                 }
                             }
                         }
+                        }
+                        }
                     }
-                } else {
-                    HorizontalPager(pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
-                        val item = YearMonth.of((base + page) / 12, (base + page) % 12 + 1)
-                        Column(Modifier.fillMaxSize().then(if (page == selectedIndex) Modifier.sharedBounds(
-                            rememberSharedContentState("month-$page"), this@AnimatedContent,
-                            boundsTransform = { _, _ -> tween(300) },
-                        ) else Modifier)) {
-                            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                                listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEach {
-                                    Text(it, color = CalendarMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    Column(Modifier.fillMaxSize().zIndex(1f).then(if (yearMode) Modifier.clearAndSetSemantics { } else Modifier)) {
+                        val chrome = Modifier.graphicsLayer { alpha = ((progress.value - 0.8f) / 0.2f).coerceIn(0f, 1f) }
+                        val agendaMotion = Modifier.graphicsLayer { alpha = agendaProgress.value; translationY = (1f - agendaProgress.value) * 160.dp.toPx() }
+                        Column(Modifier.weight(1f)) {
+                        Box(Modifier.height(weekHeight + 288.dp).fillMaxWidth().onGloballyPositioned { gridBounds = Rect(it.positionInRoot(), it.size.toSize()) }) {
+                            Box(Modifier.fillMaxSize().graphicsLayer {
+                                val t = progress.value
+                                val thumb = thumbnails[selectedIndex] ?: gridBounds
+                                transformOrigin = TransformOrigin(0f, 0f)
+                                if (gridBounds.width > 0 && gridBounds.height > 0) {
+                                    scaleX = thumb.width / gridBounds.width + (1f - thumb.width / gridBounds.width) * t
+                                    scaleY = thumb.height / gridBounds.height + (1f - thumb.height / gridBounds.height) * t
+                                    translationX = (thumb.left - gridBounds.left) * (1f - t)
+                                    translationY = (thumb.top - gridBounds.top) * (1f - t)
+                                }
+                                alpha = if (t == 0f) 0f else 1f
+                            }.background(Color.Black)) {
+                                HorizontalPager(pager, modifier = Modifier.fillMaxSize(), userScrollEnabled = monthEnabled && !rangeSelecting) { page ->
+                                    MonthGrid(monthAt(page), worked, state, selectedDate, monthEnabled, { date ->
+                                        selectedDate = date.toString()
+                                        if (YearMonth.from(date) != monthAt(page)) scope.launch { pager.animateScrollToPage(monthIndex(YearMonth.from(date))) }
+                                    }, { dates, mark -> viewModel.setWorkDays(dates, mark) }, { rangeSelecting = it })
                                 }
                             }
-                            val start = item.atDay(1).minusDays((item.atDay(1).dayOfWeek.value - 1).toLong())
-                            repeat(6) { row ->
-                                Row(Modifier.fillMaxWidth().weight(1f)) {
-                                    repeat(7) { column ->
-                                        val date = start.plusDays((row * 7 + column).toLong())
-                                        val isWorked = date.toString() in worked
-                                        val today = date == LocalDate.now()
-                                        Box(Modifier.weight(1f).fillMaxHeight().combinedClickable(
-                                            role = Role.Checkbox,
-                                            onClick = { selectedDate = date.toString(); viewModel.toggleWorkDay(date.toString()) },
-                                            onLongClickLabel = "Day events and shop income",
-                                            onLongClick = { selectedDate = date.toString(); showDay = true },
-                                        ).semantics {
-                                            contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"))
-                                            stateDescription = if (isWorked) "Worked" else "Not worked"
-                                        }, contentAlignment = Alignment.Center) {
-                                            Box(Modifier.size(36.dp).clip(CircleShape).background(if (isWorked) CalendarAccent else Color.Transparent).then(if (today) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier), contentAlignment = Alignment.Center) {
-                                                Text(date.dayOfMonth.toString(), fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
-                                                    isWorked -> Color.Black
-                                                    date.month != item.month -> Color(0xFF85817B)
-                                                    today -> CalendarAccent
-                                                    column >= 5 -> CalendarMuted
-                                                    else -> CalendarInk
-                                                })
-                                            }
-                                            if (state.events.any { it.date == date.toString() } || state.shopIncome.any { it.date == date.toString() }) {
-                                                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp).size(4.dp).clip(CircleShape).background(CalendarAccent))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        }
+                        Column(agendaMotion.padding(horizontal = 12.dp).onSizeChanged { summaryHeight = it.height }) {
+                            DaySummary(state, viewModel, selectedDate, worked, monthEnabled, openRates)
+                        }
+                        DayAgenda(state, viewModel, selectedDate, monthEnabled, ::editEvent, agendaMotion.weight(1f).fillMaxWidth())
                         }
                     }
                 }
             }
         }
-        if (!yearMode) {
-        Row(Modifier.fillMaxWidth().clickable { showDay = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = MaterialTheme.typography.titleSmall, color = CalendarInk)
-                val eventCount = state.events.count { it.date == selectedDate }
-                Text(if (eventCount == 0) "Events and shop income" else if (eventCount == 1) "1 event · Shop income" else "$eventCount events · Shop income", style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
-            }
-            Icon(Icons.Default.ChevronRight, "Open selected day", tint = CalendarMuted)
+        if (showActions && monthEnabled) Box(Modifier.fillMaxSize().zIndex(3f).clickable(
+            interactionSource = remember { MutableInteractionSource() }, indication = null,
+        ) { showActions = false })
+        if (agendaVisible && searchProgress.value < 1f) Box(Modifier.fillMaxSize().padding(24.dp).zIndex(4f).graphicsLayer { alpha = agendaProgress.value * (1f - searchProgress.value); translationY = (1f - agendaProgress.value) * 160.dp.toPx() }, contentAlignment = Alignment.BottomEnd) {
+            EntrySpeedDial(showActions, { if (monthEnabled && !searchOpen) showActions = !showActions }) { destination -> showActions = false; editingEventId = null; editor = destination }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf("All earned" to totals.earnedCents, "All spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
-                Column(Modifier.weight(1f).padding(end = 8.dp)) { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyMedium) }
+        if (searchOpen && searchQuery.isNotBlank()) {
+            val matches = state.events.filter { it.title.contains(searchQuery.trim(), ignoreCase = true) || it.notes.contains(searchQuery.trim(), ignoreCase = true) }
+            Column(Modifier.fillMaxSize().padding(top = toolbarHeight).background(Color.Black).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 12.dp).zIndex(2f)) {
+                if (matches.isEmpty()) Text("No matching events", color = CalendarMuted, modifier = Modifier.padding(vertical = 20.dp))
+                matches.forEach { event -> key(event.id) { EventCard(event, showDate = true, edit = { editEvent(event) }, delete = { viewModel.deleteEvent(event) }) } }
             }
         }
-        Spacer(Modifier.height(16.dp))
+        if (searchOpen || searchProgress.value > 0f) {
+            CalendarSearchHeader(searchOpen, searchQuery, { searchQuery = it }, ::closeSearch,
+                Modifier.align(Alignment.TopCenter).zIndex(5f).graphicsLayer { alpha = searchProgress.value; translationY = -16.dp.toPx() * (1f - searchProgress.value) })
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState, selectedDate: String, enabled: Boolean, select: (LocalDate) -> Unit, commitRange: (List<String>, Boolean) -> Unit, selecting: (Boolean) -> Unit) {
+    val locale = Locale.getDefault()
+    val firstDay = WeekFields.of(locale).firstDayOfWeek
+    val start = item.atDay(1).minusDays(((item.atDay(1).dayOfWeek.value - firstDay.value + 7) % 7).toLong())
+    val haptics = LocalHapticFeedback.current
+    val currentWorked by rememberUpdatedState(worked)
+    val currentCommit by rememberUpdatedState(commitRange)
+    val currentSelecting by rememberUpdatedState(selecting)
+    var preview by remember(item) { mutableStateOf<Set<String>?>(null) }
+    var dragging by remember(item) { mutableStateOf(false) }
+    LaunchedEffect(worked) { if (!dragging) preview = null }
+    val displayedWorked = preview ?: worked
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            repeat(7) { column ->
+                Text(firstDay.plus(column.toLong()).getDisplayName(TextStyle.SHORT, locale).uppercase(locale), color = CalendarMuted, fontSize = 12.sp, lineHeight = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+            }
+        }
+        Column(Modifier.weight(1f).fillMaxWidth().pointerInput(item, enabled) {
+            if (!enabled) return@pointerInput
+            var anchor = start
+            var endpoint = start
+            var mark = true
+            var baseline = emptySet<String>()
+            fun dateAt(position: Offset): LocalDate {
+                val column = (position.x / (size.width / 7f)).toInt().coerceIn(0, 6)
+                val row = (position.y / (size.height / 6f)).toInt().coerceIn(0, 5)
+                return start.plusDays((row * 7 + column).toLong())
+            }
+            fun update() {
+                val range = workDayRange(anchor, endpoint).toSet()
+                preview = if (mark) baseline + range else baseline - range
+            }
+            detectDragGesturesAfterLongPress(
+                onDragStart = {
+                    baseline = currentWorked
+                    anchor = dateAt(it)
+                    endpoint = anchor
+                    mark = anchor.toString() !in baseline
+                    currentSelecting(true)
+                    dragging = true
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    update()
+                },
+                onDrag = { change, _ -> change.consume(); endpoint = dateAt(change.position); update() },
+                onDragEnd = {
+                    currentCommit(workDayRange(anchor, endpoint), mark)
+                    dragging = false
+                    currentSelecting(false)
+                },
+                onDragCancel = { preview = null; dragging = false; currentSelecting(false) },
+            )
+        }) {
+        repeat(6) { row ->
+            Row(Modifier.fillMaxWidth().weight(1f)) {
+                repeat(7) { column ->
+                    val date = start.plusDays((row * 7 + column).toLong())
+                    val isWorked = date.toString() in displayedWorked
+                    val today = date == LocalDate.now()
+                    val selected = date.toString() == selectedDate
+                    val interaction = remember { MutableInteractionSource() }
+                    Box(Modifier.weight(1f).fillMaxHeight().clickable(
+                        enabled = enabled, role = Role.Button,
+                        interactionSource = interaction, indication = null,
+                        onClick = { select(date) },
+                    ).semantics {
+                        contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"))
+                        this.selected = selected
+                        stateDescription = listOfNotNull(if (today) "Today" else null, if (isWorked) "Worked" else "Not worked").joinToString(", ")
+                    }, contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.size(42.dp).then(pressFeedback(interaction)).clip(CircleShape).indication(interaction, ripple(bounded = true)).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) MaterialTheme.colorScheme.primary.copy(alpha = if (date.month != item.month) 0.38f else 1f) else if (selected) Color(0xFF152B4D) else Color.Transparent), contentAlignment = Alignment.Center) {
+        Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
+                                isWorked && date.month != item.month -> CalendarInk.copy(alpha = 0.8f)
+                                isWorked -> MaterialTheme.colorScheme.onPrimary
+                                date.month != item.month -> CalendarInk.copy(alpha = 0.5f)
+                                today || selected -> CalendarAccent
+                            date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY -> CalendarInk.copy(alpha = 0.65f)
+                                else -> CalendarInk
+                            })
+                        }
+                        val hasDetails = state.events.any { it.date == date.toString() } || state.shopIncome.any { it.date == date.toString() }
+                        Box(Modifier.padding(top = 2.dp).size(4.dp).clip(CircleShape).background(if (hasDetails) CalendarAccent else Color.Transparent))
+                        }
+                    }
+                }
+            }
+        }
         }
     }
 }
 
 @Composable
-private fun MiniMonth(month: YearMonth, worked: Set<String>) {
-    val offset = month.atDay(1).dayOfWeek.value - 1
-    Column(Modifier.padding(top = 8.dp)) {
-        repeat(6) { row ->
-            Row(Modifier.fillMaxWidth()) {
-                repeat(7) { column ->
-                    val day = row * 7 + column - offset + 1
-                    val valid = day in 1..month.lengthOfMonth()
-                    Text(if (valid) day.toString() else "", fontSize = 10.sp, lineHeight = 13.sp, textAlign = TextAlign.Center, color = if (valid && month.atDay(day).toString() in worked) CalendarAccent else CalendarMuted, modifier = Modifier.weight(1f).heightIn(min = 14.dp))
-                }
+private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selectedDate: String, worked: Set<String>, enabled: Boolean, openRates: () -> Unit) {
+    val events = state.events.filter { it.date == selectedDate }
+    val shop = state.shopIncome.firstOrNull { it.date == selectedDate }
+    val rate = state.rates.filter { it.effectiveDate <= selectedDate }.maxByOrNull { it.effectiveDate }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).heightIn(min = 48.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = MaterialTheme.typography.titleSmall, color = CalendarInk)
             }
+            if (rate != null) Text("${formatDh(rate.dailyAmountCents)} per day", style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
+            else Text("Set daily pay", style = MaterialTheme.typography.bodySmall, color = CalendarAccent, modifier = Modifier.clickable(enabled = enabled, onClick = openRates).heightIn(min = 48.dp).wrapContentHeight())
+            val details = listOfNotNull(if (events.isEmpty()) null else if (events.size == 1) "1 event" else "${events.size} events", shop?.let { "Shop ${formatDh(it.amountCents)}" }).joinToString(" · ")
+            if (details.isNotEmpty()) Text(details, style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
+        }
+        Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Worked", style = MaterialTheme.typography.labelSmall, color = CalendarMuted)
+            Switch(checked = selectedDate in worked, enabled = enabled, onCheckedChange = { viewModel.toggleWorkDay(selectedDate) }, modifier = Modifier.semantics {
+                contentDescription = "Worked on ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMMM yyyy"))}"
+            })
+        }
+    }
+}
+
+@Composable
+private fun DayAgenda(state: PayflowState, model: PayflowViewModel, date: String, enabled: Boolean, edit: (DayEventEntity) -> Unit, modifier: Modifier) {
+    val events = state.events.filter { it.date == date }
+    val notes = state.shopIncome.firstOrNull { it.date == date }?.notes.orEmpty()
+    if (events.isEmpty() && notes.isBlank()) EmptyEvents(modifier)
+    else Column(modifier.verticalScroll(rememberScrollState(), enabled = enabled).padding(horizontal = 12.dp).padding(bottom = 96.dp)) {
+        if (notes.isNotBlank()) Text(notes, color = CalendarMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
+        events.forEach { event -> key(event.id) { EventCard(event, enabled = enabled, edit = { edit(event) }, delete = { model.deleteEvent(event) }) } }
+        if (events.isEmpty()) EmptyEvents(Modifier.fillMaxWidth().height(112.dp))
+    }
+}
+
+@Composable
+private fun MiniMonth(month: YearMonth, worked: Set<String>) {
+    val locale = Locale.getDefault()
+    val firstDay = WeekFields.of(locale).firstDayOfWeek
+    val offset = (month.atDay(1).dayOfWeek.value - firstDay.value + 7) % 7
+    val fontScale = LocalDensity.current.fontScale
+    val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textAlign = android.graphics.Paint.Align.CENTER; fontFeatureSettings = "tnum" } }
+    // One drawing per thumbnail keeps opening the year from composing 588 tiny Text nodes.
+    Canvas(Modifier.fillMaxWidth().padding(top = 6.dp).height((98 * fontScale).dp)) {
+        val columnWidth = size.width / 7
+        val rowHeight = size.height / 7
+        paint.textSize = 10.sp.toPx()
+        val baselineOffset = -(paint.ascent() + paint.descent()) / 2
+        repeat(7) { column ->
+            paint.color = android.graphics.Color.rgb(246, 244, 240)
+            drawContext.canvas.nativeCanvas.drawText(firstDay.plus(column.toLong()).getDisplayName(TextStyle.NARROW, locale), columnWidth * (column + 0.5f), rowHeight * 0.5f + baselineOffset, paint)
+        }
+        repeat(month.lengthOfMonth()) { index ->
+            val slot = index + offset
+            paint.color = if (month.atDay(index + 1).toString() in worked) android.graphics.Color.rgb(114, 167, 255) else android.graphics.Color.rgb(165, 161, 155)
+            drawContext.canvas.nativeCanvas.drawText((index + 1).toString(), columnWidth * (slot % 7 + 0.5f), rowHeight * (slot / 7 + 1.5f) + baselineOffset, paint)
         }
     }
 }

@@ -1,0 +1,17 @@
+{
+  "package": "com.dancingpumpkin.payflow",
+  "mode": "launch",
+  "serial": "emulator-5554",
+  "sdk": "37",
+  "post_capture_screen": "Physical size: 1080x2400\r\nOverride size: 1080x2340",
+  "post_capture_density": "Physical density: 420\r\nOverride density: 480",
+  "post_capture_font_scale": "1.15",
+  "video_size_px": [1080, 1920],
+  "capture_size_matches": false,
+  "evidence_warning": "Legacy capture configuration was queried after recording and does not establish the starting viewport or font scale. Superseded by comparative-refined/launch.mp4 and its pre-capture and encoded-size checks.",
+  "animator_scale": "null",
+  "apk_sha256": "317aade4353172e74dfc9d748d79176106aa5130dffae82fd06d6bad40757992",
+  "recording_sha256": "26076a33ba6698f424348f3cf4301d49ba45debc6859862462b6c397afb2f42c",
+  "source_commit": "76d12a775e48bc1ea75f22c0b2dee6378c2e32dc",
+  "tracked_app_changes": false
+}

@@ -4,6 +4,7 @@ build/
 local.properties
 *.iml
 .DS_Store
+__pycache__/
 
 # Local agent instructions and tooling
 .agents/
