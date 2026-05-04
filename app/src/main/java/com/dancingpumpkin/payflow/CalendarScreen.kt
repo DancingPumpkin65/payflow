@@ -34,6 +34,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
@@ -294,6 +296,13 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
     val currentSelecting by rememberUpdatedState(selecting)
     var preview by remember(item) { mutableStateOf<Set<String>?>(null) }
     var dragging by remember(item) { mutableStateOf(false) }
+    var liquidDates by remember(item) { mutableStateOf(emptySet<String>()) }
+    var liquidEndpoint by remember(item) { mutableStateOf("") }
+    val liquid = remember(item) { Animatable(0f) }
+    LaunchedEffect(dragging) {
+        if (dragging) liquid.snapTo(1f)
+        else liquid.animateTo(0f, spring(dampingRatio = .8f, stiffness = 420f))
+    }
     LaunchedEffect(worked) { if (!dragging) preview = null }
     val displayedWorked = preview ?: worked
     Column(Modifier.fillMaxSize()) {
@@ -302,7 +311,19 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                 Text(firstDay.plus(column.toLong()).getDisplayName(TextStyle.SHORT, locale).uppercase(locale), color = CalendarMuted, fontSize = 12.sp, lineHeight = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }
-        Column(Modifier.weight(1f).fillMaxWidth().pointerInput(item, enabled) {
+        Column(Modifier.weight(1f).fillMaxWidth().drawBehind {
+            val tension = liquid.value.coerceIn(0f, 1f)
+            if (tension > 0f) repeat(6) { row ->
+                repeat(6) { column ->
+                    val date = start.plusDays((row * 7 + column).toLong())
+                    if (date.toString() in liquidDates && date.plusDays(1).toString() in liquidDates) {
+                        val a = Offset(size.width / 7 * (column + .5f), size.height / 6 * (row + .5f) - 3.dp.toPx())
+                        val b = a + Offset(size.width / 7, 0f)
+                        liquidBridge(a, b, 18.dp.toPx(), 18.dp.toPx(), CalendarAccent.copy(alpha = tension), tension)
+                    }
+                }
+            }
+        }.pointerInput(item, enabled) {
             if (!enabled) return@pointerInput
             var anchor = start
             var endpoint = start
@@ -316,6 +337,8 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
             fun update() {
                 val range = workDayRange(anchor, endpoint).toSet()
                 preview = if (mark) baseline + range else baseline - range
+                liquidDates = if (mark) range else emptySet()
+                liquidEndpoint = endpoint.toString()
             }
             detectDragGesturesAfterLongPress(
                 onDragStart = {
@@ -334,7 +357,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                     dragging = false
                     currentSelecting(false)
                 },
-                onDragCancel = { preview = null; dragging = false; currentSelecting(false) },
+                onDragCancel = { preview = null; liquidDates = emptySet(); liquidEndpoint = ""; dragging = false; currentSelecting(false) },
             )
         }) {
         repeat(6) { row ->
@@ -355,7 +378,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                         stateDescription = listOfNotNull(if (today) "Today" else null, if (isWorked) "Worked" else "Not worked").joinToString(", ")
                     }, contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.size(42.dp).then(pressFeedback(interaction)).clip(CircleShape).indication(interaction, ripple(bounded = true)).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) MaterialTheme.colorScheme.primary.copy(alpha = if (date.month != item.month) 0.38f else 1f) else if (selected) Color(0xFF152B4D) else Color.Transparent), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(42.dp).then(pressFeedback(interaction)).graphicsLayer { scaleX = if (date.toString() == liquidEndpoint) 1f + .12f * liquid.value.coerceIn(0f, 1f) else 1f }.clip(CircleShape).indication(interaction, ripple(bounded = true)).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) MaterialTheme.colorScheme.primary.copy(alpha = if (date.month != item.month) 0.38f else 1f) else if (selected) Color(0xFF152B4D) else Color.Transparent), contentAlignment = Alignment.Center) {
         Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
                                 isWorked && date.month != item.month -> CalendarInk.copy(alpha = 0.8f)
                                 isWorked -> MaterialTheme.colorScheme.onPrimary
@@ -394,9 +417,7 @@ private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selecte
         }
         Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Worked", style = MaterialTheme.typography.labelSmall, color = CalendarMuted)
-            Switch(checked = selectedDate in worked, enabled = enabled, onCheckedChange = { viewModel.toggleWorkDay(selectedDate) }, modifier = Modifier.semantics {
-                contentDescription = "Worked on ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMMM yyyy"))}"
-            })
+            LiquidWorkedSwitch(selectedDate in worked, enabled, "Worked on ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMMM yyyy"))}") { viewModel.toggleWorkDay(selectedDate) }
         }
     }
 }
