@@ -20,6 +20,8 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+import java.time.ZoneId
+import com.dancingpumpkin.payflow.domain.reminderInstant
 
 internal enum class DayEntryTab(val label: String) { EVENT("Event"), INCOME("Shop income") }
 
@@ -34,8 +36,12 @@ internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: 
     var amount by rememberSaveable(date) { mutableStateOf(existing?.let { BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
     var incomeNotes by rememberSaveable(date) { mutableStateOf(existing?.notes ?: "") }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
+    var eventTime by rememberSaveable { mutableStateOf(initialEvent?.time) }
+    var reminderMinutes by rememberSaveable { mutableStateOf(initialEvent?.reminderMinutes) }
+    val reminderUnchanged = initialEvent != null && date == initialEvent.date && eventTime == initialEvent.time && reminderMinutes == initialEvent.reminderMinutes
+    val reminderValid = reminderMinutes == null || reminderUnchanged || runCatching { reminderInstant(DayEventEntity(date = date, title = title, notes = "", time = eventTime, reminderMinutes = reminderMinutes), ZoneId.systemDefault())?.isAfter(Instant.now()) == true }.getOrDefault(false)
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 0..100_000_000_000L }
-    val valid = if (tab == DayEntryTab.EVENT) title.isNotBlank() else cents != null
+    val valid = if (tab == DayEntryTab.EVENT) title.isNotBlank() && reminderValid else cents != null
     FormEditor(
         title = if (tab == DayEntryTab.EVENT) if (initialEvent == null) "New event" else "Edit event" else "Shop income",
         dismiss = dismiss,
@@ -43,7 +49,7 @@ internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: 
             IconButton(enabled = valid, onClick = {
                 finish {
                     if (tab == DayEntryTab.EVENT) {
-                        val event = DayEventEntity(id = initialEvent?.id ?: 0, date = date, title = title.trim(), notes = eventNotes.trim())
+                        val event = DayEventEntity(id = initialEvent?.id ?: 0, date = date, title = title.trim(), notes = eventNotes.trim(), time = eventTime, reminderMinutes = reminderMinutes)
                         if (initialEvent == null) model.addEvent(event) else model.updateEvent(event)
                     }
                     else model.saveShopIncome(ShopIncomeEntity(date, cents!!, incomeNotes.trim()))
@@ -74,6 +80,10 @@ internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: 
                     RoundedArrow(ArrowDirection.RIGHT, "Choose entry date")
                 }
             }
+        }
+        if (tab == DayEntryTab.EVENT) {
+            EventTimingFields(eventTime, reminderMinutes, { eventTime = it }, { reminderMinutes = it })
+            if (!reminderValid) Text("Choose a future reminder time, or set Reminder to None.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
             TextField(

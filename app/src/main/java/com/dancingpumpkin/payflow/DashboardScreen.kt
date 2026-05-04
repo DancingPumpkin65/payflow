@@ -11,6 +11,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -36,14 +38,16 @@ private val RetainedTeal = Color(0xFF78D6BE)
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-internal fun DashboardScreen(state: PayflowState, back: () -> Unit) {
+internal fun DashboardScreen(state: PayflowState, model: PayflowViewModel, back: () -> Unit, analytics: () -> Unit, activity: () -> Unit) {
     val now = remember { YearMonth.now() }
     val pager = rememberPagerState(initialPage = (now.year - 1900) * 12 + now.monthValue - 1, pageCount = { 2400 })
     var shop by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Text("Dashboard", style = MaterialTheme.typography.titleLarge)
+            Text("Dashboard", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = analytics) { Icon(Icons.Outlined.DateRange, "Date range analytics") }
+            IconButton(onClick = activity) { Icon(Icons.Outlined.GridView, "Yearly activity") }
         }
         PrimaryTabRow(selectedTabIndex = if (shop) 1 else 0, containerColor = Color.Transparent) {
             Tab(selected = !shop, onClick = { shop = false }, selectedContentColor = RevenueBlue, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant, text = { Text("Work pay") })
@@ -114,6 +118,10 @@ internal fun DashboardScreen(state: PayflowState, back: () -> Unit) {
                         ChartKey("Expenses", ExpenseCoral)
                     }
                 }
+                val ledger = if (shop) "shop" else "personal"
+                val period = remember(state, month, ledger) { state.analyze(month.atDay(1), month.atEndOfMonth(), ledger) }
+                CategoryBreakdown(period.categoryTotals)
+                SavingsSection(state, model, month, ledger)
             }
         }
     }

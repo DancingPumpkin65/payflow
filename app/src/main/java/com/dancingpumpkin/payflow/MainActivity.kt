@@ -1,6 +1,8 @@
 package com.dancingpumpkin.payflow
 
 import android.os.Bundle
+import android.content.Intent
+import androidx.activity.viewModels
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.activity.ComponentActivity
@@ -76,16 +78,29 @@ private val Muted = Color(0xFF9C9994)
 private val Accent = Color(0xFF72A7FF)
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) = super.onCreate(savedInstanceState).also {
-        setContent { PayflowApp() }
+    private val model: PayflowViewModel by viewModels()
+    private var requestedEvent by mutableStateOf<Pair<String, Long>?>(null)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        readRequest(intent)
+        setContent { PayflowApp(model, requestedEvent) { requestedEvent = null } }
     }
+    private fun readRequest(intent: Intent) { intent.getStringExtra("openDate")?.let { date -> if (runCatching { LocalDate.parse(date) }.isSuccess) requestedEvent = date to intent.getLongExtra("openEventId", 0) } }
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); readRequest(intent) }
+    override fun onResume() { super.onResume(); model.refreshReminders() }
 }
 
-private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
+private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD, ANALYTICS, ACTIVITY }
 
-@Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
+@Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel(), requestedEvent: Pair<String, Long>? = null, consumed: () -> Unit = {}) {
     val state by viewModel.state.collectAsState()
     var destination by rememberSaveable { mutableStateOf(Destination.CALENDAR) }
+    var requestedDate by rememberSaveable { mutableStateOf<String?>(null) }
+    var requestedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var returnToActivity by rememberSaveable { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(requestedEvent) {
+        requestedEvent?.let { (date, id) -> requestedDate = date; requestedId = id.takeIf { it > 0 }; returnToActivity = false; destination = Destination.CALENDAR; consumed() }
+    }
     val savedScreens = rememberSaveableStateHolder()
     val typography = remember {
         val base = Typography()
@@ -101,7 +116,8 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
             labelSmall = base.labelSmall.copy(fontFeatureSettings = "tnum"),
         )
     }
-    BackHandler(destination != Destination.CALENDAR) { destination = Destination.CALENDAR }
+    BackHandler(destination != Destination.CALENDAR) { destination = if (destination in listOf(Destination.ACTIVITY, Destination.ANALYTICS)) Destination.DASHBOARD else Destination.CALENDAR }
+    BackHandler(destination == Destination.CALENDAR && returnToActivity) { returnToActivity = false; destination = Destination.ACTIVITY }
     MaterialTheme(colorScheme = darkColorScheme(
         background = Black, surface = Color(0xFF151515), onBackground = Ink, onSurface = Ink,
         surfaceContainer = Color(0xFF1C1C1C), surfaceContainerHigh = Color(0xFF242424), surfaceContainerHighest = Color(0xFF2B2B2B),
@@ -115,14 +131,16 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
         Surface(color = Black, modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
             Box(Modifier.fillMaxSize()) {
             AnimatedContent(destination, modifier = Modifier.fillMaxSize(), transitionSpec = {
-                val direction = if (targetState == Destination.CALENDAR) -1 else 1
+                val direction = if (targetState == Destination.CALENDAR || (initialState in listOf(Destination.ANALYTICS, Destination.ACTIVITY) && targetState == Destination.DASHBOARD)) -1 else 1
                 (fadeIn(tween(300, easing = LinearOutSlowInEasing)) + slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { direction * it / 12 }) togetherWith
                     (fadeOut(tween(240)) + slideOutHorizontally(tween(240, easing = FastOutSlowInEasing)) { -direction * it / 12 }) using SizeTransform(clip = true, sizeAnimationSpec = { _, _ -> tween(0) })
             }, label = "Destination") { screen ->
             savedScreens.SaveableStateProvider(screen.name) {
             when (screen) {
-                Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES }, { destination = Destination.DASHBOARD })
-                Destination.DASHBOARD -> DashboardScreen(state) { destination = Destination.CALENDAR }
+                Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES }, { destination = Destination.DASHBOARD }, requestedDate, requestedId) { requestedDate = null; requestedId = null }
+                Destination.DASHBOARD -> DashboardScreen(state, viewModel, { destination = Destination.CALENDAR }, { destination = Destination.ANALYTICS }, { destination = Destination.ACTIVITY })
+                Destination.ANALYTICS -> AnalyticsScreen(state) { destination = Destination.DASHBOARD }
+                Destination.ACTIVITY -> ActivityScreen(state, { destination = Destination.DASHBOARD }) { date -> requestedDate = date; requestedId = null; returnToActivity = true; destination = Destination.CALENDAR }
                 Destination.RATES -> RatesScreen(state.rates, { destination = Destination.CALENDAR }, viewModel::addRate, viewModel::updateRate, viewModel::deleteRate)
                 Destination.EXPENSES -> ExpensesScreen(state.expenses, { destination = Destination.CALENDAR }, viewModel::addExpense, viewModel::deleteExpense, viewModel::updateExpense)
             }
@@ -138,7 +156,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     rates.firstOrNull { it.id == editingId }?.let { rate ->
-        MoneyDialog("Edit pay rate", false, null, { date, _, cents, _ -> update(rate.copy(effectiveDate = date, dailyAmountCents = cents)); editingId = null }, { editingId = null }, initialRate = rate)
+        MoneyDialog("Edit pay rate", false, null, { date, _, cents, _, _ -> update(rate.copy(effectiveDate = date, dailyAmountCents = cents)); editingId = null }, { editingId = null }, initialRate = rate)
     }
     SimpleScreen("Pay rates", back, { showDialog = true }) {
         rates.asReversed().forEach { rate ->
@@ -151,20 +169,21 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
     if (showDialog) RateDialog({ date, amount -> add(date, amount); showDialog = false }, { showDialog = false })
 }
 
-@Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long, String) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
+@Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long, String, String) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
+    val categoryNames = (DefaultSpendingCategories + expenses.map { it.spendingCategory }).distinct()
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     val editing = expenses.firstOrNull { it.id == editingId }
-    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents, type -> update(record.copy(date = date, title = title, amountCents = cents, category = type)); editingId = null }, { editingId = null }) }
+    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents, type, spending -> update(record.copy(date = date, title = title, amountCents = cents, category = type, spendingCategory = spending)); editingId = null }, { editingId = null }, categoryNames = categoryNames) }
     var showDialog by rememberSaveable { mutableStateOf(false) }
     SimpleScreen("Expenses", back, { showDialog = true }) {
         expenses.forEach { expense ->
             key(expense.id) {
-                RecordCard(expense.title, "${displayDate(expense.date)} · ${if (expense.category == "shop") "Shop" else "Personal"}", amount = money(expense.amountCents), kind = "expense", edit = { editingId = expense.id }, delete = { delete(expense) })
+                RecordCard(expense.title, "${displayDate(expense.date)} · ${if (expense.category == "shop") "Shop" else "Personal"} · ${expense.spendingCategory}", amount = money(expense.amountCents), kind = "expense", edit = { editingId = expense.id }, delete = { delete(expense) })
             }
         }
         if (expenses.isEmpty()) Text("No expenses yet.", color = Muted, modifier = Modifier.padding(top = 16.dp))
     }
-    if (showDialog) ExpenseDialog("personal", { date, title, amount, type -> add(date, title, amount, type); showDialog = false }, { showDialog = false })
+    if (showDialog) ExpenseDialog("personal", categoryNames, { date, title, amount, type, spending -> add(date, title, amount, type, spending); showDialog = false }, { showDialog = false })
 }
 
 @Composable private fun SimpleScreen(title: String, back: () -> Unit, add: () -> Unit, content: @Composable () -> Unit) {
@@ -183,16 +202,17 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
 }
 
 @Composable private fun RateDialog(save: (String, Long) -> Unit, dismiss: () -> Unit) {
-    MoneyDialog("Set daily pay", false, null, { date, _, amount, _ -> save(date, amount) }, dismiss)
+    MoneyDialog("Set daily pay", false, null, { date, _, amount, _, _ -> save(date, amount) }, dismiss)
 }
 
-@Composable private fun ExpenseDialog(category: String, save: (String, String, Long, String) -> Unit, dismiss: () -> Unit) {
-    MoneyDialog("New expense", true, null, save, dismiss, initialCategory = category)
+@Composable private fun ExpenseDialog(category: String, categories: List<String>, save: (String, String, Long, String, String) -> Unit, dismiss: () -> Unit) {
+    MoneyDialog("New expense", true, null, save, dismiss, initialCategory = category, categoryNames = categories)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long, String) -> Unit, dismiss: () -> Unit, initialRate: PayRateEntity? = null, initialCategory: String = "personal") {
+@Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long, String, String) -> Unit, dismiss: () -> Unit, initialRate: PayRateEntity? = null, initialCategory: String = "personal", categoryNames: List<String> = DefaultSpendingCategories) {
     var category by rememberSaveable { mutableStateOf(initial?.category ?: initialCategory) }
+    var spending by rememberSaveable { mutableStateOf(initial?.spendingCategory ?: "Uncategorized") }
     var date by rememberSaveable { mutableStateOf(initial?.date ?: initialRate?.effectiveDate ?: LocalDate.now().toString()) }
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
     var amount by rememberSaveable { mutableStateOf((initial?.amountCents ?: initialRate?.dailyAmountCents)?.let { java.math.BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
@@ -200,9 +220,10 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
     FormEditor(heading, dismiss, action = { finish ->
-        IconButton(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { finish { save(parsedDate!!.toString(), title.trim(), cents!!, category) } }) { Icon(Icons.Default.Check, if (!expense) "Save rate" else if (initial == null) "Save expense" else "Save changes") }
+        IconButton(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { finish { save(parsedDate!!.toString(), title.trim(), cents!!, category, spending) } }) { Icon(Icons.Default.Check, if (!expense) "Save rate" else if (initial == null) "Save expense" else "Save changes") }
     }) {
         if (expense) ExpenseCategoryPicker(category) { category = it }
+        if (expense) ChoiceField("Category", spending, (categoryNames + spending).distinct(), { spending = it }, custom = true)
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer, errorContainerColor = MaterialTheme.colorScheme.surfaceContainer, focusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant, unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant)

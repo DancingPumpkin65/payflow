@@ -88,7 +88,7 @@ private fun monthAt(index: Int) = YearMonth.of(1900 + index / 12, index % 12 + 1
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit, openDashboard: () -> Unit) {
+internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit, openDashboard: () -> Unit, requestedDate: String? = null, requestedEventId: Long? = null, consumed: () -> Unit = {}) {
     val now = YearMonth.now()
     val pager = rememberPagerState(initialPage = monthIndex(now), pageCount = { 2400 })
     var yearMode by rememberSaveable { mutableStateOf(false) }
@@ -144,7 +144,24 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         pager.requestScrollToPage(monthIndex(YearMonth.from(LocalDate.parse(event.date))))
         editor = DayEntryTab.EVENT
     }
-    editor?.let { destination -> DayEntryEditor(LocalDate.parse(selectedDate), state, viewModel, destination, state.events.firstOrNull { it.id == editingEventId }) { editor = null; editingEventId = null } }
+    LaunchedEffect(requestedDate, state.loaded) {
+        if (requestedDate != null && state.loaded) {
+            val date = LocalDate.parse(requestedDate)
+            selectedDate = requestedDate
+            pager.requestScrollToPage(monthIndex(YearMonth.from(date)).coerceIn(0, 2399))
+            yearMode = false
+            if (requestedEventId != null && state.events.any { it.id == requestedEventId }) { editingEventId = requestedEventId; editor = DayEntryTab.EVENT }
+            consumed()
+        }
+    }
+    editor?.let { destination ->
+        val activeId = editingEventId
+        key(destination, activeId) {
+            DayEntryEditor(LocalDate.parse(selectedDate), state, viewModel, destination, state.events.firstOrNull { it.id == activeId }) {
+                if (editor == destination && editingEventId == activeId) { editor = null; editingEventId = null }
+            }
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         val weekHeight = with(density) { 14.sp.toDp() } + 8.dp

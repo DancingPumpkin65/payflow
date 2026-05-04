@@ -34,8 +34,8 @@ internal fun FormEditor(
         closing = true
         keyboard?.hide()
         scope.launch {
-            progress.animateTo(0f, tween(240, easing = FastOutLinearInEasing))
-            after()
+            try { progress.animateTo(0f, tween(240, easing = FastOutLinearInEasing)) }
+            finally { after() }
         }
     }
     Dialog(onDismissRequest = { finish(dismiss) }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
