@@ -17,6 +17,9 @@ The user's explicit liquid-motion request applies to three controls:
   removes the preview without saving. Week boundaries never draw across unrelated
   rows.
 
+Both participating fills stretch/compress and move slightly toward their neck;
+the date glyphs stay stable. The 650ms timing is unchanged by the optimization.
+
 Visual neighbors include the cells directly above/below and diagonally adjacent.
 The stretch follows the direction of movement. A week-wrap never draws a long
 connector across the row. Releasing early lets the current pulse finish rather
@@ -35,7 +38,7 @@ immediately, with workday mutations enabled once stored data is available.
 
 ## Verification
 
-- Local unit/lint/debug checks pass: 23 tests, no failures, no lint errors.
+- Local unit/lint/debug checks pass: 24 tests, no failures, no lint errors.
   The added calculation test proves Personal and Shop spending do not mix.
 - On the API 37 emulator, upgraded a version-2 database containing a 12.34 DH
   expense. Room validated the version-3 schema; the record retained its ID,
