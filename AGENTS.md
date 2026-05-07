@@ -54,16 +54,23 @@ selfhosting), and ArkType (or zod if perf isn't an issue)
 
 ## Commit history preferences
 
-- The user explicitly requests backdated future commits beginning Monday,
-  May 4, 2026, in Africa/Casablanca time. Set both GIT_AUTHOR_DATE and
-  GIT_COMMITTER_DATE for each new commit; do not silently revert to today's date.
-- Continue chronologically from the latest commit made under this convention.
-  Inspect both dates in git history before committing. Older real-date commits
-  are not the scheduling cursor. Use weekdays, with related implementation,
-  tests and documentation commits grouped into coherent work sessions.
+- Mandatory: use the user's exact date/count schedule in
+  `scripts/commit-schedule.csv` for every new commit, including its Saturdays.
+  These replace the earlier weekday-only preference. Never substitute today's
+  date or invent a different schedule.
+- Before committing, run `./scripts/commit-scheduled.ps1 -DryRun`. Stage only
+  intended changes, then run `./scripts/commit-scheduled.ps1 -Message '...'`.
+  The helper sets and verifies both author and committer dates in Morocco time.
+  Do not bypass it with plain `git commit` or automatic GitHub merge commits;
+  preserve this convention when making local merge commits too.
+- Counts mean unique scheduled commits in this repository, including merges,
+  across all local refs (not total GitHub account contributions). Fetch relevant
+  refs first. May 4 already has its 11 commits. Consume remaining slots in order.
+  If counts exceed a target or the schedule is exhausted, stop and report it.
 - Commit completed logical changes with concise, specific messages. Multiple
   meaningful commits may share a day; do not create empty commits, arbitrary
-  splits or a fixed daily quota just to decorate the contribution graph.
+  splits just to fill a quota. Unused scheduled slots remain for actual future
+  work; do not claim that they have already been filled.
 - Leave existing published history unchanged unless the user explicitly asks
   to rewrite it. Report the actual assigned dates when asked; backdated dates
   describe this requested history convention, not when the work was performed.
