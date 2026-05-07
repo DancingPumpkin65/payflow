@@ -16,12 +16,12 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.*
 
 /** A pinched neck overlaps both circles so their boundaries join without blur. */
-internal fun DrawScope.liquidBridge(a: Offset, b: Offset, ra: Float, rb: Float, color: Color, tension: Float = 1f) {
+internal fun DrawScope.liquidBridge(a: Offset, b: Offset, ra: Float, rb: Float, color: Color, tension: Float = 1f, neckRatio: Float = .3f) {
     val distance = (b - a).getDistance()
     if (distance < 1f || tension <= 0f) return
     val u = (b - a) / distance
     val n = Offset(-u.y, u.x)
-    val neck = min(ra, rb) * .3f * tension
+    val neck = min(ra, rb) * neckRatio * tension
     val p = Path().apply {
         moveTo((a + n * ra * .8f).x, (a + n * ra * .8f).y)
         val c1 = a + u * distance * .48f + n * neck

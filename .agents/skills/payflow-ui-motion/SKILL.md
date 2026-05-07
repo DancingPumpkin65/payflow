@@ -56,6 +56,8 @@ Android specialist skills for platform details. These are the user's two
     the add/edit form; the main list shows both categories.
     Use visual grid adjacency for horizontal, vertical and diagonal travel;
     do not substitute consecutive calendar dates for the actual pointer path.
+    Deform the bubble fills while keeping date glyphs stable. Activity uses
+    compact mobile heatmap squares, with a full-size date-picker alternative.
 14. Held/dragged controls follow the finger directly, without tween lag.
 15. Exits are 20% shorter than entrances.
 16. Overlap outgoing/incoming screens instead of replacing them instantly.

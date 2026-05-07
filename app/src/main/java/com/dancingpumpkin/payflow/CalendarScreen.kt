@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.dancingpumpkin.payflow.domain.workDayRange
 import com.dancingpumpkin.payflow.domain.liquidGridNeighbors
+import com.dancingpumpkin.payflow.domain.calendarDetailDates
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.ripple
 import androidx.compose.material.icons.filled.Search
@@ -315,7 +316,14 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
     var preview by remember(item) { mutableStateOf<Set<String>?>(null) }
     var dragging by remember(item) { mutableStateOf(false) }
     var liquidPair by remember(item) { mutableStateOf<Pair<LocalDate, LocalDate>?>(null) }
-    var liquidEndpoint by remember(item) { mutableStateOf("") }
+    val liquidCells = remember(start, liquidPair) { liquidPair?.let { (a, b) -> java.time.temporal.ChronoUnit.DAYS.between(start, a).toInt() to java.time.temporal.ChronoUnit.DAYS.between(start, b).toInt() } }
+    val liquidDirection = remember(liquidCells) {
+        liquidCells?.let { (a, b) ->
+            val dx = (b % 7 - a % 7).toFloat(); val dy = (b / 7 - a / 7).toFloat()
+            Offset(dx, dy) / kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
+        } ?: Offset.Zero
+    }
+    val detailDates = remember(state.events, state.shopIncome) { calendarDetailDates(state.events, state.shopIncome) }
     val liquid = remember(item) { Animatable(0f) }
     LaunchedEffect(liquidPair) {
         liquid.snapTo(0f)
@@ -336,11 +344,10 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
         Column(Modifier.weight(1f).fillMaxWidth().drawBehind {
             val tension = kotlin.math.sin(liquid.value.coerceIn(0f, 1f) * Math.PI).toFloat().coerceAtLeast(0f)
             if (tension > 0f) liquidPair?.let { (from, to) ->
-                val aIndex = java.time.temporal.ChronoUnit.DAYS.between(start, from).toInt()
-                val bIndex = java.time.temporal.ChronoUnit.DAYS.between(start, to).toInt()
+                val (aIndex, bIndex) = liquidCells ?: return@let
                 if (liquidGridNeighbors(aIndex, bIndex) && from.toString() in displayedWorked && to.toString() in displayedWorked) {
                     fun center(index: Int) = Offset(size.width / 7 * (index % 7 + .5f), size.height / 6 * (index / 7 + .5f) - 3.dp.toPx())
-                    liquidBridge(center(aIndex), center(bIndex), 18.dp.toPx(), 18.dp.toPx(), CalendarAccent.copy(alpha = tension), tension)
+                    liquidBridge(center(aIndex), center(bIndex), 18.dp.toPx(), 18.dp.toPx(), CalendarAccent.copy(alpha = tension), tension, neckRatio = .18f)
                 }
             }
         }.pointerInput(item, enabled) {
@@ -357,7 +364,6 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
             fun update() {
                 val range = workDayRange(anchor, endpoint, item).toSet()
                 preview = if (mark) baseline + range else baseline - range
-                liquidEndpoint = endpoint.toString()
             }
             detectDragGesturesAfterLongPress(
                 onDragStart = startDrag@{
@@ -387,7 +393,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                     dragging = false
                     currentSelecting(false)
                 },
-                onDragCancel = { preview = null; liquidPair = null; liquidEndpoint = ""; dragging = false; currentSelecting(false) },
+                onDragCancel = { preview = null; liquidPair = null; dragging = false; currentSelecting(false) },
             )
         }) {
         repeat(6) { row ->
@@ -408,16 +414,23 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                         stateDescription = listOfNotNull(if (today) "Today" else null, if (isWorked) "Worked" else "Not worked").joinToString(", ")
                     }, contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.size(42.dp).then(pressFeedback(interaction)).graphicsLayer {
-                            val squish = if (liquidPair != null && date.toString() == liquidEndpoint) kotlin.math.sin(liquid.value.coerceIn(0f, 1f) * Math.PI).toFloat() else 0f
-                            val vertical = liquidPair?.let { (a, b) ->
-                                val ai = java.time.temporal.ChronoUnit.DAYS.between(start, a).toInt()
-                                val bi = java.time.temporal.ChronoUnit.DAYS.between(start, b).toInt()
-                                kotlin.math.abs(ai / 7 - bi / 7) > kotlin.math.abs(ai % 7 - bi % 7)
-                            } == true
-                            scaleX = if (vertical) 1f - .08f * squish else 1f + .14f * squish
-                            scaleY = if (vertical) 1f + .14f * squish else 1f - .08f * squish
-                        }.clip(CircleShape).indication(interaction, ripple(bounded = true)).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) MaterialTheme.colorScheme.primary else if (selected) Color(0xFF152B4D) else Color.Transparent), contentAlignment = Alignment.Center) {
+                        val fill = if (isWorked) MaterialTheme.colorScheme.primary else if (selected) Color(0xFF152B4D) else Color.Transparent
+                        Box(Modifier.size(42.dp).then(pressFeedback(interaction)).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier), contentAlignment = Alignment.Center) {
+                            Canvas(Modifier.matchParentSize()) {
+                                val pair = liquidPair
+                                var sx = 1f; var sy = 1f; var shift = Offset.Zero
+                                if (isWorked && pair != null && (date == pair.first || date == pair.second)) {
+                                    val wave = kotlin.math.sin(liquid.value.coerceIn(0f, 1f) * Math.PI).toFloat().coerceAtLeast(0f)
+                                    val vertical = kotlin.math.abs(liquidDirection.y) > kotlin.math.abs(liquidDirection.x)
+                                    sx = if (vertical) 1f - .18f * wave else 1f + .24f * wave
+                                    sy = if (vertical) 1f + .24f * wave else 1f - .18f * wave
+                                    shift = liquidDirection * (2.dp.toPx() * wave * if (date == pair.first) 1f else -1f)
+                                }
+                                val radius = 18.dp.toPx()
+                                val center = Offset(size.width / 2, size.height / 2) + shift
+                                drawOval(fill, center - Offset(radius * sx, radius * sy), androidx.compose.ui.geometry.Size(radius * 2 * sx, radius * 2 * sy))
+                            }
+                            Box(Modifier.matchParentSize().clip(CircleShape).indication(interaction, ripple(bounded = true)))
         Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
                                 isWorked && date.month != item.month -> CalendarInk.copy(alpha = 0.8f)
                                 isWorked -> MaterialTheme.colorScheme.onPrimary
@@ -427,7 +440,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                                 else -> CalendarInk
                             })
                         }
-                        val hasDetails = state.events.any { it.date == date.toString() } || state.shopIncome.any { it.date == date.toString() }
+                        val hasDetails = date.toString() in detailDates
                         Box(Modifier.padding(top = 2.dp).size(4.dp).clip(CircleShape).background(if (hasDetails) CalendarAccent else Color.Transparent))
                         }
                     }
