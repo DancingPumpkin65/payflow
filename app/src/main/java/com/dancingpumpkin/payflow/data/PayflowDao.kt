@@ -11,6 +11,11 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PayflowDao {
+    @Query("SELECT * FROM day_events ORDER BY date, id") fun observeEvents(): Flow<List<DayEventEntity>>
+    @Insert suspend fun addEvent(event: DayEventEntity)
+    @Delete suspend fun deleteEvent(event: DayEventEntity)
+    @Query("SELECT * FROM shop_income ORDER BY date") fun observeShopIncome(): Flow<List<ShopIncomeEntity>>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveShopIncome(income: ShopIncomeEntity)
     @Query("SELECT EXISTS(SELECT 1 FROM work_days WHERE date = :date)") suspend fun isWorked(date: String): Boolean
     @Transaction
     suspend fun toggleWorkDay(date: String) {

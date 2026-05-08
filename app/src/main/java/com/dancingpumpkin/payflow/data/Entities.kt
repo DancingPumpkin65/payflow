@@ -6,6 +6,12 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "work_days")
 data class WorkDayEntity(@PrimaryKey val date: String)
 
+@Entity(tableName = "day_events")
+data class DayEventEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val date: String, val title: String, val notes: String)
+
+@Entity(tableName = "shop_income")
+data class ShopIncomeEntity(@PrimaryKey val date: String, val amountCents: Long, val notes: String)
+
 @Entity(tableName = "pay_rates")
 data class PayRateEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

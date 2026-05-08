@@ -8,6 +8,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -40,7 +42,7 @@ private val CalendarAccent = Color(0xFFC9A46A)
 private val CalendarInk = Color(0xFFF6F4F0)
 private val CalendarMuted = Color(0xFFA5A19B)
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
 @Composable
 internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit) {
     val now = YearMonth.now()
@@ -49,11 +51,14 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var yearMode by rememberSaveable { mutableStateOf(false) }
     var selectedIndex by rememberSaveable { mutableIntStateOf(pager.currentPage) }
     var year by rememberSaveable { mutableIntStateOf(now.year) }
+    var selectedDate by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    var showDay by rememberSaveable { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val month = YearMonth.of((base + pager.currentPage) / 12, (base + pager.currentPage) % 12 + 1)
     val totals = viewModel.totals()
     val worked = remember(state.workDays) { state.workDays.map { it.date }.toSet() }
     BackHandler(yearMode) { yearMode = false }
+    if (showDay) DayDetailsSheet(LocalDate.parse(selectedDate), state, viewModel) { showDay = false }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -85,10 +90,10 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                 repeat(3) { column ->
                                     val item = YearMonth.of(year, row * 3 + column + 1)
                                     val index = item.year * 12 + item.monthValue - 1 - base
-                                    Column(Modifier.weight(1f).padding(vertical = 8.dp).sharedBounds(
+                                    Column(Modifier.weight(1f).padding(vertical = 8.dp).then(if (index == selectedIndex) Modifier.sharedBounds(
                                         rememberSharedContentState("month-$index"), this@AnimatedContent,
                                         boundsTransform = { _, _ -> tween(300) },
-                                    ).clickable {
+                                    ) else Modifier).clickable {
                                         selectedIndex = index
                                         scope.launch { pager.scrollToPage(index); yearMode = false }
                                     }) {
@@ -102,10 +107,10 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 } else {
                     HorizontalPager(pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
                         val item = YearMonth.of((base + page) / 12, (base + page) % 12 + 1)
-                        Column(Modifier.fillMaxSize().sharedBounds(
+                        Column(Modifier.fillMaxSize().then(if (page == selectedIndex) Modifier.sharedBounds(
                             rememberSharedContentState("month-$page"), this@AnimatedContent,
                             boundsTransform = { _, _ -> tween(300) },
-                        )) {
+                        ) else Modifier)) {
                             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                                 listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEach {
                                     Text(it, color = CalendarMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
@@ -118,7 +123,12 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                         val date = start.plusDays((row * 7 + column).toLong())
                                         val isWorked = date.toString() in worked
                                         val today = date == LocalDate.now()
-                                        Box(Modifier.weight(1f).fillMaxHeight().toggleable(isWorked, role = Role.Checkbox, onValueChange = { viewModel.toggleWorkDay(date.toString()) }).semantics {
+                                        Box(Modifier.weight(1f).fillMaxHeight().combinedClickable(
+                                            role = Role.Checkbox,
+                                            onClick = { selectedDate = date.toString(); viewModel.toggleWorkDay(date.toString()) },
+                                            onLongClickLabel = "Day events and shop income",
+                                            onLongClick = { selectedDate = date.toString(); showDay = true },
+                                        ).semantics {
                                             contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"))
                                             stateDescription = if (isWorked) "Worked" else "Not worked"
                                         }, contentAlignment = Alignment.Center) {
@@ -130,6 +140,9 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                                     column >= 5 -> CalendarMuted
                                                     else -> CalendarInk
                                                 })
+                                            }
+                                            if (state.events.any { it.date == date.toString() } || state.shopIncome.any { it.date == date.toString() }) {
+                                                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp).size(4.dp).clip(CircleShape).background(CalendarAccent))
                                             }
                                         }
                                     }
@@ -147,6 +160,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = openRates) { Text("Rates", color = CalendarMuted) }
+            TextButton(onClick = { showDay = true }) { Text("Day", color = CalendarMuted) }
             TextButton(onClick = { scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base) }; yearMode = false }) { Text("Today", color = CalendarAccent) }
             TextButton(onClick = openExpenses) { Text("Expenses", color = CalendarMuted) }
         }
