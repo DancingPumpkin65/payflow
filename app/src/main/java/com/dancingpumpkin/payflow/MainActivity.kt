@@ -132,7 +132,24 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     }
 }
 
-@Composable private fun YearPicker(year: Int, select: (Int) -> Unit, close: () -> Unit) { Column(Modifier.fillMaxWidth().padding(top = 28.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(year.toString(), color = Ink, style = MaterialTheme.typography.headlineMedium); TextButton(onClick = close) { Text("Close", color = Muted) } }; repeat(4) { row -> Row(Modifier.fillMaxWidth()) { repeat(3) { col -> val number = row * 3 + col + 1; TextButton(onClick = { select(number) }, modifier = Modifier.weight(1f).height(70.dp)) { Text(java.time.Month.of(number).getDisplayName(TextStyle.FULL, Locale.getDefault()), color = Ink, textAlign = TextAlign.Center) } } } } }
+@Composable private fun YearPicker(year: Int, select: (Int) -> Unit, close: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(top = 28.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(year.toString(), color = Ink, style = MaterialTheme.typography.headlineMedium)
+            TextButton(onClick = close) { Text("Close", color = Muted) }
+        }
+        repeat(4) { row ->
+            Row(Modifier.fillMaxWidth()) {
+                repeat(3) { column ->
+                    val month = row * 3 + column + 1
+                    TextButton(onClick = { select(month) }, modifier = Modifier.weight(1f).height(70.dp)) {
+                        Text(java.time.Month.of(month).getDisplayName(TextStyle.FULL, Locale.getDefault()), color = Ink, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable private fun RatesScreen(rates: List<PayRateEntity>, back: () -> Unit, add: (String, Long) -> Unit) {
     var showDialog by remember { mutableStateOf(false) }; SimpleScreen("Pay rates", back, { showDialog = true }) { rates.forEach { Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(it.effectiveDate, color = Ink); Text(money(it.dailyAmountCents) + " / day", color = Accent) } }; if (rates.isEmpty()) Text("Add the first daily rate to calculate income.", color = Muted) }; if (showDialog) RateDialog({ date, amount -> add(date, amount); showDialog = false }, { showDialog = false })

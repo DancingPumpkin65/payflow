@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [WorkDayEntity::class, PayRateEntity::class, ExpenseEntity::class], version = 1)
+@Database(entities = [WorkDayEntity::class, PayRateEntity::class, ExpenseEntity::class], version = 1, exportSchema = false)
 abstract class PayflowDatabase : RoomDatabase() {
     abstract fun dao(): PayflowDao
 
