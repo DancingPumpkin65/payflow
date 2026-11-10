@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,7 +24,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -119,12 +119,14 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     Row(Modifier.fillMaxWidth()) { listOf("S", "M", "T", "W", "T", "F", "S").forEach { Text(it, color = Muted, textAlign = TextAlign.Center, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall) } }
     val first = month.atDay(1); val start = first.minusDays((first.dayOfWeek.value % 7).toLong())
     Column(Modifier.padding(top = 6.dp)) { repeat(6) { row -> Row(Modifier.fillMaxWidth()) { repeat(7) { column -> val date = start.plusDays((row * 7 + column).toLong()); DayCell(date, date.month == month.month, date.dayOfWeek, date.toString() in workedDates, { toggle(date.toString()) }) } } } }
-    TextButton(onClick = openRates, modifier = Modifier.align(Alignment.End)) { Text("Set daily rate", color = Accent) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = openRates) { Text("Set daily rate", color = Accent) }
+    }
 }
 
 @Composable private fun MoneyColumn(label: String, cents: Long, color: Color) = Column { Text(label, color = Muted, style = MaterialTheme.typography.labelSmall); Text(money(cents), color = color, style = MaterialTheme.typography.bodyLarge) }
 
-@Composable private fun DayCell(date: LocalDate, current: Boolean, day: DayOfWeek, worked: Boolean, onClick: () -> Unit) {
+@Composable private fun RowScope.DayCell(date: LocalDate, current: Boolean, day: DayOfWeek, worked: Boolean, onClick: () -> Unit) {
     val today = date == LocalDate.now(); val weekend = day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY
     Box(Modifier.weight(1f).height(50.dp).padding(4.dp).clip(CircleShape).background(if (worked) Accent else Color.Transparent).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         Text(date.dayOfMonth.toString(), color = when { worked -> Black; !current -> Faint; weekend -> Muted; else -> Ink }, style = MaterialTheme.typography.bodyMedium, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal)
