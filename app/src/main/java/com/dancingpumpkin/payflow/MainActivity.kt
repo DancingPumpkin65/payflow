@@ -11,6 +11,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.SaveableStateHolder
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -81,31 +85,35 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 
 @Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
-    var destination by remember { mutableStateOf(Destination.CALENDAR) }
+    var destination by rememberSaveable { mutableStateOf(Destination.CALENDAR) }
+    val savedScreens = rememberSaveableStateHolder()
     BackHandler(destination != Destination.CALENDAR) { destination = Destination.CALENDAR }
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(background = Black, surface = Black, onBackground = Ink, onSurface = Ink, primary = Accent)) {
         Surface(color = Black, modifier = Modifier.fillMaxSize()) {
+            savedScreens.SaveableStateProvider(destination.name) {
             when (destination) {
                 Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
                 Destination.RATES -> RatesScreen(state.rates, { destination = Destination.CALENDAR }, viewModel::addRate)
                 Destination.EXPENSES -> ExpensesScreen(state.expenses, { destination = Destination.CALENDAR }, viewModel::addExpense, viewModel::deleteExpense, viewModel::updateExpense)
+            }
             }
         }
     }
 }
 
 @Composable private fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit) {
-    var month by remember { mutableStateOf(YearMonth.now()) }
-    var yearMode by remember { mutableStateOf(false) }
+    var monthIndex by rememberSaveable { mutableStateOf(YearMonth.now().year * 12 + YearMonth.now().monthValue - 1) }
+    val month = YearMonth.of(Math.floorDiv(monthIndex, 12), Math.floorMod(monthIndex, 12) + 1)
+    var yearMode by rememberSaveable { mutableStateOf(false) }
+    BackHandler(yearMode) { yearMode = false }
     val totals = viewModel.totals()
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 18.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Payflow", color = Accent, style = MaterialTheme.typography.labelMedium)
-            TextButton(onClick = openExpenses) { Text("Expenses", color = Ink) }
         }
         AnimatedContent(yearMode, transitionSpec = { (scaleIn(tween(220)) + fadeIn(tween(180))).togetherWith(scaleOut(tween(180)) + fadeOut(tween(140))) }, label = "calendar hierarchy") { showYear ->
-            if (showYear) YearPicker(month.year, { selected -> month = YearMonth.of(month.year, selected); yearMode = false }, { yearMode = false }) else MonthCalendar(
-                month, state.workDays.map { it.date }.toSet(), viewModel.earnedForMonth(month.toString()), totals, { month = month.minusMonths(1) }, { month = month.plusMonths(1) }, { yearMode = true }, viewModel::toggleWorkDay, openRates
+            if (showYear) YearPicker(month.year, { selected -> monthIndex = month.year * 12 + selected - 1; yearMode = false }, { yearMode = false }) else MonthCalendar(
+                month, state.workDays.map { it.date }.toSet(), viewModel.earnedForMonth(month.toString()), totals, { monthIndex-- }, { monthIndex++ }, { yearMode = true }, viewModel::toggleWorkDay, openRates
             )
         }
         Spacer(Modifier.weight(1f))
@@ -131,7 +139,6 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
         MoneyColumn("Earned", totals.earnedCents, Ink); MoneyColumn("Spent", totals.spentCents, Ink); MoneyColumn("Net", totals.netCents, Accent)
     }
     Row(Modifier.fillMaxWidth()) { listOf("S", "M", "T", "W", "T", "F", "S").forEach { Text(it, color = Muted, textAlign = TextAlign.Center, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall) } }
-    val first = month.atDay(1); val start = first.minusDays((first.dayOfWeek.value % 7).toLong())
     AnimatedContent(month, transitionSpec = {
         val direction = if (targetState > initialState) 1 else -1
         slideInHorizontally(tween(200)) { it * direction }.togetherWith(slideOutHorizontally(tween(200)) { -it * direction })
