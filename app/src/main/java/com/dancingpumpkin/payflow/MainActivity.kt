@@ -17,6 +17,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -84,12 +87,14 @@ class MainActivity : ComponentActivity() {
 private enum class Destination { CALENDAR, RATES, EXPENSES }
 
 @Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
+    val launchOpacity = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { launchOpacity.animateTo(1f, tween(220)) }
     val state by viewModel.state.collectAsState()
     var destination by rememberSaveable { mutableStateOf(Destination.CALENDAR) }
     val savedScreens = rememberSaveableStateHolder()
     BackHandler(destination != Destination.CALENDAR) { destination = Destination.CALENDAR }
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(background = Black, surface = Black, onBackground = Ink, onSurface = Ink, primary = Accent)) {
-        Surface(color = Black, modifier = Modifier.fillMaxSize()) {
+        Surface(color = Black, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = launchOpacity.value }) {
             savedScreens.SaveableStateProvider(destination.name) {
             when (destination) {
                 Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
