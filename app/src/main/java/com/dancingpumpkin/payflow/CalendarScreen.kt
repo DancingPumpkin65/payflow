@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
@@ -78,6 +79,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     val progress = remember { Animatable(if (yearMode) 0f else 1f) }
     val thumbnails = remember { mutableMapOf<Int, Rect>() }
     var gridBounds by remember { mutableStateOf(Rect.Zero) }
+    var yearBounds by remember { mutableStateOf(Rect.Zero) }
     val yearScroll = rememberScrollState()
     val monthEnabled = !yearMode && !progress.isRunning
     val yearEnabled = yearMode && !progress.isRunning
@@ -92,16 +94,23 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val pageHeight = maxOf(maxHeight, if (density.fontScale > 1.2f) 760.dp else 680.dp)
         val yearHeight = (maxHeight - 64.dp).coerceAtLeast(120.dp)
-        val rowHeight = with(density) { MaterialTheme.typography.labelLarge.lineHeight.toDp() } + (112 * density.fontScale).dp + 36.dp
         fun chooseYear() {
             if (progress.isRunning) return
             if (yearMode) { yearMode = false; return }
             selectedIndex = pager.currentPage
             year = month.year
             scope.launch {
-                val row = selectedIndex % 12 / columns
-                val offset = with(density) { (48.dp + rowHeight * (row + 1) - yearHeight).coerceAtLeast(0.dp).roundToPx() }
-                yearScroll.scrollTo(offset)
+                withFrameNanos { }
+                val thumb = thumbnails[selectedIndex]
+                val margin = with(density) { 8.dp.toPx() }
+                if (thumb != null) {
+                    val delta = when {
+                        thumb.bottom > yearBounds.bottom - margin -> thumb.bottom - yearBounds.bottom + margin
+                        thumb.top < yearBounds.top + margin -> thumb.top - yearBounds.top - margin
+                        else -> 0f
+                    }
+                    yearScroll.scrollBy(delta)
+                }
                 withFrameNanos { }
                 yearMode = true
             }
@@ -141,7 +150,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     // Keep both endpoints measured. Only the month layer moves, so
                     // neither lazy composition nor parent reflow stalls the first frame.
-                    Column(Modifier.fillMaxWidth().height(yearHeight).zIndex(if (yearEnabled) 2f else 0f).graphicsLayer { alpha = 1f - progress.value }
+                    Column(Modifier.fillMaxWidth().height(yearHeight).onGloballyPositioned { yearBounds = Rect(it.positionInRoot(), it.size.toSize()) }.zIndex(if (yearEnabled) 2f else 0f).graphicsLayer { alpha = 1f - progress.value }
                         .then(if (!yearMode) Modifier.clearAndSetSemantics { } else Modifier).verticalScroll(yearScroll, enabled = yearEnabled)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(enabled = yearEnabled && year > 1900, onClick = { year-- }) { Text("‹ ${year - 1}", color = CalendarMuted) }
