@@ -21,6 +21,8 @@ import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -76,16 +78,19 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
 
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).clickable {
+                selectedIndex = pager.currentPage
+                year = month.year
+                scope.launch { withFrameNanos { }; yearMode = !yearMode }
+            }.heightIn(min = 48.dp).semantics { role = Role.Button; contentDescription = "Choose month and year" }, verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (yearMode) year.toString() else month.format(DateTimeFormatter.ofPattern("MMM yyyy")),
                 style = MaterialTheme.typography.titleLarge,
                 color = CalendarInk,
-                modifier = Modifier.weight(1f).clickable {
-                    selectedIndex = pager.currentPage
-                    year = month.year
-                    scope.launch { withFrameNanos { }; yearMode = !yearMode }
-                }.padding(vertical = 12.dp).semantics { role = Role.Button; contentDescription = "Choose month and year" },
+                modifier = Modifier.padding(vertical = 12.dp),
             )
+            Icon(if (yearMode) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = CalendarMuted, modifier = Modifier.padding(start = 4.dp).size(20.dp))
+            }
             if (!yearMode) Column(horizontalAlignment = Alignment.End) {
                 Text(formatDh(viewModel.earnedForMonth(month.toString())), color = CalendarAccent, style = MaterialTheme.typography.titleMedium)
                 Text("Month earned", color = CalendarMuted, style = MaterialTheme.typography.labelSmall)
@@ -99,6 +104,10 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                     DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base); selectedDate = LocalDate.now().toString() }; yearMode = false })
                 }
             }
+        }
+        if (!yearMode) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Swipe to change month", color = CalendarMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base); selectedDate = LocalDate.now().toString() } }) { Text("Today") }
         }
         SharedTransitionLayout(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(yearMode, label = "Calendar hierarchy") { overview ->
@@ -129,7 +138,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                             withFrameNanos { }
                                             yearMode = false
                                         }
-                                    }) {
+                                    }.semantics { contentDescription = "${item.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${item.year}"; role = Role.Button }.border(if (item == month) 1.dp else 0.dp, if (item == month) CalendarAccent else Color.Transparent, MaterialTheme.shapes.small).padding(6.dp)) {
                                         Text(item.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()), color = if (item == month) CalendarAccent else CalendarInk, style = MaterialTheme.typography.labelLarge)
                                         MiniMonth(item, worked)
                                     }
@@ -156,26 +165,29 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                         val date = start.plusDays((row * 7 + column).toLong())
                                         val isWorked = date.toString() in worked
                                         val today = date == LocalDate.now()
+                                        val selected = date.toString() == selectedDate
                                         Box(Modifier.weight(1f).fillMaxHeight().combinedClickable(
-                                            role = Role.Checkbox,
-                                            onClick = { selectedDate = date.toString(); viewModel.toggleWorkDay(date.toString()) },
+                                            role = Role.Button,
+                                            onClick = { selectedDate = date.toString() },
                                             onLongClickLabel = "Day events and shop income",
                                             onLongClick = { selectedDate = date.toString(); showDay = true },
                                         ).semantics {
                                             contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"))
-                                            stateDescription = if (isWorked) "Worked" else "Not worked"
+                                            this.selected = selected
+                                            stateDescription = listOfNotNull(if (today) "Today" else null, if (isWorked) "Worked" else "Not worked").joinToString(", ")
                                         }, contentAlignment = Alignment.Center) {
-                                            Box(Modifier.size(36.dp).clip(CircleShape).background(if (isWorked) CalendarAccent else Color.Transparent).then(if (today) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier), contentAlignment = Alignment.Center) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Box(Modifier.size(38.dp).clip(CircleShape).background(if (isWorked) CalendarAccent else if (selected) Color(0xFF30291E) else Color.Transparent).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier), contentAlignment = Alignment.Center) {
                                                 Text(date.dayOfMonth.toString(), fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
                                                     isWorked -> Color.Black
                                                     date.month != item.month -> Color(0xFF85817B)
-                                                    today -> CalendarAccent
+                                                    today || selected -> CalendarAccent
                                                     column >= 5 -> CalendarMuted
                                                     else -> CalendarInk
                                                 })
                                             }
-                                            if (state.events.any { it.date == date.toString() } || state.shopIncome.any { it.date == date.toString() }) {
-                                                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp).size(4.dp).clip(CircleShape).background(CalendarAccent))
+                                            val hasDetails = state.events.any { it.date == date.toString() } || state.shopIncome.any { it.date == date.toString() }
+                                            Box(Modifier.padding(top = 3.dp).size(4.dp).clip(CircleShape).background(if (hasDetails) CalendarAccent else Color.Transparent))
                                             }
                                         }
                                     }
@@ -187,16 +199,28 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
             }
         }
         if (!yearMode) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxWidth().clickable { showDay = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = MaterialTheme.typography.titleSmall, color = CalendarInk)
                 val eventCount = state.events.count { it.date == selectedDate }
-                Text(if (eventCount == 0) "Events and shop income" else if (eventCount == 1) "1 event · Shop income" else "$eventCount events · Shop income", style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
+                val shop = state.shopIncome.firstOrNull { it.date == selectedDate }
+                val detail = listOfNotNull(if (eventCount == 0) "No events" else if (eventCount == 1) "1 event" else "$eventCount events", shop?.let { "Shop ${formatDh(it.amountCents)}" }).joinToString(" · ")
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
             }
             Icon(Icons.Default.ChevronRight, "Open selected day", tint = CalendarMuted)
         }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Worked", style = MaterialTheme.typography.bodyLarge, color = CalendarInk)
+                val rate = state.rates.filter { it.effectiveDate <= selectedDate }.maxByOrNull { it.effectiveDate }
+                Text(rate?.let { "${formatDh(it.dailyAmountCents)} per day" } ?: "Set your daily pay in Pay rates", style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
+            }
+            Switch(checked = selectedDate in worked, onCheckedChange = { viewModel.toggleWorkDay(selectedDate) }, modifier = Modifier.semantics { contentDescription = "Worked on ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMMM yyyy"))}" })
+        }
+        Text("All time", style = MaterialTheme.typography.labelSmall, color = CalendarMuted, modifier = Modifier.padding(top = 12.dp))
         Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf("All earned" to totals.earnedCents, "All spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
+            listOf("Earned" to totals.earnedCents, "Spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
                 Column(Modifier.weight(1f).padding(end = 8.dp)) { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyMedium) }
             }
         }
