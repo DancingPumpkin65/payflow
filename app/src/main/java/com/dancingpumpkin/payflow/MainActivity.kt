@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -115,7 +116,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
         onSurfaceVariant = Color(0xFFC1BDB7), outline = Color(0xFF8A8680),
         error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
     )) {
-        Surface(color = Black, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = launchOpacity.value }) {
+        Surface(color = Black, modifier = Modifier.fillMaxSize().safeDrawingPadding().graphicsLayer { alpha = launchOpacity.value }) {
             savedScreens.SaveableStateProvider(destination.name) {
             when (destination) {
                 Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
