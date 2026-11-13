@@ -79,7 +79,8 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
                     OutlinedTextField(title, { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(eventNotes, { eventNotes = it }, label = { Text("Notes, optional") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                 } else {
-                    OutlinedTextField(amount, { amount = it }, label = { Text("Total in DH") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true, isError = amount.isNotBlank() && cents == null, supportingText = { if (amount.isNotBlank() && cents == null) Text("Use a positive amount with up to 2 decimals") })
+                    OutlinedTextField(amount, { amount = it }, label = { Text("Total in DH") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true, isError = amount.isNotBlank() && cents == null)
+                    if (amount.isNotBlank() && cents == null) Text("Use zero or a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     OutlinedTextField(notes, { notes = it }, label = { Text("Notes, optional") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                 }
             }
