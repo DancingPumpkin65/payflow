@@ -37,7 +37,7 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
     var notes by rememberSaveable(key) { mutableStateOf(existing?.notes ?: "") }
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 0..100_000_000_000L }
     ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(date.format(DateTimeFormatter.ofPattern("EEEE")), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
@@ -47,7 +47,7 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Events", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                FilledTonalIconButton(onClick = { editor = "event" }) { Icon(Icons.Default.Add, "Add event") }
+                IconButton(onClick = { editor = "event" }) { Icon(Icons.Default.Add, "Add event", tint = MaterialTheme.colorScheme.primary) }
             }
             if (events.isEmpty()) Text("No events planned", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             events.forEach { event ->
@@ -63,9 +63,9 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Shop income", style = MaterialTheme.typography.titleMedium)
-                    Text(existing?.let { DecimalFormat("#,##0.##").format(BigDecimal.valueOf(it.amountCents, 2)) + " DH" } ?: "Not recorded", color = if (existing == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge)
+                    Text(existing?.let { DecimalFormat("#,##0.00").format(BigDecimal.valueOf(it.amountCents, 2)) + " DH" } ?: "Not recorded", color = if (existing == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary, style = if (existing == null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleLarge)
                 }
-                IconButton(onClick = { editor = "income" }) { Icon(if (existing == null) Icons.Default.Add else Icons.Default.Edit, "Edit shop income") }
+                IconButton(onClick = { editor = "income" }) { Icon(if (existing == null) Icons.Default.Add else Icons.Default.Edit, "Edit shop income", tint = MaterialTheme.colorScheme.primary) }
             }
             if (!existing?.notes.isNullOrBlank()) Text(existing!!.notes, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }

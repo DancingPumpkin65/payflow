@@ -80,7 +80,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                     scope.launch { withFrameNanos { }; yearMode = !yearMode }
                 }.padding(vertical = 12.dp).semantics { role = Role.Button; contentDescription = "Choose month and year" },
             )
-            Column(horizontalAlignment = Alignment.End) {
+            if (!yearMode) Column(horizontalAlignment = Alignment.End) {
                 Text(formatDh(viewModel.earnedForMonth(month.toString())), color = CalendarAccent, style = MaterialTheme.typography.titleMedium)
                 Text("Month earned", color = CalendarMuted, style = MaterialTheme.typography.labelSmall)
             }
@@ -176,20 +176,22 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 }
             }
         }
+        if (!yearMode) {
         Row(Modifier.fillMaxWidth().clickable { showDay = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = MaterialTheme.typography.titleSmall, color = CalendarInk)
                 val eventCount = state.events.count { it.date == selectedDate }
-                Text(if (eventCount == 0) "Events and shop income" else "$eventCount events · Shop income", style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
+                Text(if (eventCount == 0) "Events and shop income" else if (eventCount == 1) "1 event · Shop income" else "$eventCount events · Shop income", style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
             }
             Icon(Icons.Default.ChevronRight, "Open selected day", tint = CalendarMuted)
         }
         Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf("Earned" to totals.earnedCents, "Spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
+            listOf("All earned" to totals.earnedCents, "All spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
                 Column(Modifier.weight(1f).padding(end = 8.dp)) { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyMedium) }
             }
         }
         Spacer(Modifier.height(16.dp))
+        }
     }
 }
 
@@ -202,7 +204,7 @@ private fun MiniMonth(month: YearMonth, worked: Set<String>) {
                 repeat(7) { column ->
                     val day = row * 7 + column - offset + 1
                     val valid = day in 1..month.lengthOfMonth()
-                    Text(if (valid) day.toString() else "", fontSize = 9.sp, textAlign = TextAlign.Center, color = if (valid && month.atDay(day).toString() in worked) CalendarAccent else CalendarMuted, modifier = Modifier.weight(1f).heightIn(min = 15.dp))
+                    Text(if (valid) day.toString() else "", fontSize = 10.sp, lineHeight = 13.sp, textAlign = TextAlign.Center, color = if (valid && month.atDay(day).toString() in worked) CalendarAccent else CalendarMuted, modifier = Modifier.weight(1f).heightIn(min = 14.dp))
                 }
             }
         }

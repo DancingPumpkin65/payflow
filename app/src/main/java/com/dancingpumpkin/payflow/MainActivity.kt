@@ -102,6 +102,9 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
         background = Black, surface = Color(0xFF151515), onBackground = Ink, onSurface = Ink,
         surfaceContainer = Color(0xFF1C1C1C), surfaceContainerHigh = Color(0xFF242424), surfaceContainerHighest = Color(0xFF2B2B2B),
         primary = Accent, onPrimary = Black, secondary = Accent, onSecondary = Black,
+        primaryContainer = Color(0xFF30291E), onPrimaryContainer = Color(0xFFEBD1A8),
+        secondaryContainer = Color(0xFF30291E), onSecondaryContainer = Color(0xFFEBD1A8),
+        surfaceContainerLow = Color(0xFF191919), surfaceContainerLowest = Black, surfaceTint = Color.Transparent,
         onSurfaceVariant = Color(0xFFC1BDB7), outline = Color(0xFF8A8680),
         error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
     )) {
