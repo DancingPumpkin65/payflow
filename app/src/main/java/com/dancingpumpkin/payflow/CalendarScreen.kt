@@ -18,6 +18,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -53,6 +55,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var year by rememberSaveable { mutableIntStateOf(now.year) }
     var selectedDate by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     var showDay by rememberSaveable { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val month = YearMonth.of((base + pager.currentPage) / 12, (base + pager.currentPage) % 12 + 1)
     val totals = viewModel.totals()
@@ -64,7 +67,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 if (yearMode) year.toString() else month.format(DateTimeFormatter.ofPattern("MMM yyyy")),
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.titleLarge,
                 color = CalendarInk,
                 modifier = Modifier.weight(1f).clickable {
                     selectedIndex = pager.currentPage
@@ -75,6 +78,15 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
             Column(horizontalAlignment = Alignment.End) {
                 Text(formatDh(viewModel.earnedForMonth(month.toString())), color = CalendarAccent, style = MaterialTheme.typography.titleMedium)
                 Text("Month earned", color = CalendarMuted, style = MaterialTheme.typography.labelSmall)
+            }
+            Box {
+                IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Menu") }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(text = { Text("Day events and shop income") }, onClick = { showMenu = false; showDay = true })
+                    DropdownMenuItem(text = { Text("Pay rates") }, onClick = { showMenu = false; openRates() })
+                    DropdownMenuItem(text = { Text("Expenses") }, onClick = { showMenu = false; openExpenses() })
+                    DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base) }; yearMode = false })
+                }
             }
         }
         SharedTransitionLayout(Modifier.weight(1f).fillMaxWidth()) {
@@ -95,7 +107,13 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                         boundsTransform = { _, _ -> tween(300) },
                                     ) else Modifier).clickable {
                                         selectedIndex = index
-                                        scope.launch { pager.scrollToPage(index); yearMode = false }
+                                        scope.launch {
+                                            // Let the selected thumbnail register its shared bounds before it exits.
+                                            withFrameNanos { }
+                                            pager.scrollToPage(index)
+                                            withFrameNanos { }
+                                            yearMode = false
+                                        }
                                     }) {
                                         Text(item.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()), color = if (item == month) CalendarAccent else CalendarInk, style = MaterialTheme.typography.labelLarge)
                                         MiniMonth(item, worked)
@@ -133,7 +151,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                             stateDescription = if (isWorked) "Worked" else "Not worked"
                                         }, contentAlignment = Alignment.Center) {
                                             Box(Modifier.size(36.dp).clip(CircleShape).background(if (isWorked) CalendarAccent else Color.Transparent).then(if (today) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier), contentAlignment = Alignment.Center) {
-                                                Text(date.dayOfMonth.toString(), fontSize = 20.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
+                                                Text(date.dayOfMonth.toString(), fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
                                                     isWorked -> Color.Black
                                                     date.month != item.month -> Color(0xFF85817B)
                                                     today -> CalendarAccent
@@ -158,12 +176,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 Column { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyLarge) }
             }
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = openRates) { Text("Rates", color = CalendarMuted) }
-            TextButton(onClick = { showDay = true }) { Text("Day", color = CalendarMuted) }
-            TextButton(onClick = { scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base) }; yearMode = false }) { Text("Today", color = CalendarAccent) }
-            TextButton(onClick = openExpenses) { Text("Expenses", color = CalendarMuted) }
-        }
+        Spacer(Modifier.height(16.dp))
     }
 }
 

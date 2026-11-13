@@ -45,6 +45,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -93,7 +98,13 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     var destination by rememberSaveable { mutableStateOf(Destination.CALENDAR) }
     val savedScreens = rememberSaveableStateHolder()
     BackHandler(destination != Destination.CALENDAR) { destination = Destination.CALENDAR }
-    MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(background = Black, surface = Black, onBackground = Ink, onSurface = Ink, primary = Accent)) {
+    MaterialTheme(colorScheme = darkColorScheme(
+        background = Black, surface = Color(0xFF151515), onBackground = Ink, onSurface = Ink,
+        surfaceContainer = Color(0xFF1C1C1C), surfaceContainerHigh = Color(0xFF242424), surfaceContainerHighest = Color(0xFF2B2B2B),
+        primary = Accent, onPrimary = Black, secondary = Accent, onSecondary = Black,
+        onSurfaceVariant = Color(0xFFC1BDB7), outline = Color(0xFF8A8680),
+        error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
+    )) {
         Surface(color = Black, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = launchOpacity.value }) {
             savedScreens.SaveableStateProvider(destination.name) {
             when (destination) {
@@ -213,7 +224,16 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     if (showDialog) ExpenseDialog({ date, title, amount -> add(date, title, amount); showDialog = false }, { showDialog = false })
 }
 
-@Composable private fun SimpleScreen(title: String, back: () -> Unit, add: () -> Unit, content: @Composable () -> Unit) { Column(Modifier.fillMaxSize().padding(20.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { TextButton(onClick = back) { Text("‹ Calendar", color = Muted) }; TextButton(onClick = add) { Text("Add", color = Accent) } }; Text(title, color = Ink, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(vertical = 20.dp)); Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { content() } } }
+@Composable private fun SimpleScreen(title: String, back: () -> Unit, add: () -> Unit, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            Text(title, color = Ink, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            TextButton(onClick = add) { Text("Add") }
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { content() }
+    }
+}
 
 @Composable private fun RateDialog(save: (String, Long) -> Unit, dismiss: () -> Unit) {
     MoneyDialog("Daily rate", false, null, { date, _, amount -> save(date, amount) }, dismiss)
