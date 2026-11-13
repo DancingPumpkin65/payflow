@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.graphics.Color
@@ -61,7 +62,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var showDay by rememberSaveable { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val yearColumns = if (LocalDensity.current.fontScale > 1.15f) 2 else 3
+    val yearColumns = if (LocalConfiguration.current.screenWidthDp < 400 || LocalDensity.current.fontScale > 1.15f) 2 else 3
     val selectedMonthPosition = remember { BringIntoViewRequester() }
     val month = YearMonth.of((base + pager.currentPage) / 12, (base + pager.currentPage) % 12 + 1)
     val totals = viewModel.totals()
