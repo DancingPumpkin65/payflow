@@ -2,10 +2,16 @@ package com.dancingpumpkin.payflow
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -15,7 +21,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
@@ -30,8 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -65,7 +68,6 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val yearColumns = if (LocalConfiguration.current.screenWidthDp < 400 || LocalDensity.current.fontScale > 1.15f) 2 else 3
-    val selectedMonthPosition = remember { BringIntoViewRequester() }
     val month = YearMonth.of((base + pager.currentPage) / 12, (base + pager.currentPage) % 12 + 1)
     val totals = viewModel.totals()
     val worked = remember(state.workDays) { state.workDays.map { it.date }.toSet() }
@@ -80,8 +82,10 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val minimumPageHeight = if (LocalDensity.current.fontScale > 1.2f) 800.dp else 720.dp
     val pageHeight = maxOf(maxHeight, minimumPageHeight)
+    val contentWidth = maxWidth - 24.dp
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-    Column(Modifier.fillMaxWidth().height(pageHeight).padding(horizontal = 12.dp)) {
+    SharedTransitionLayout(Modifier.fillMaxWidth().height(pageHeight)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).clickable {
                 selectedIndex = pager.currentPage
@@ -96,17 +100,16 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
             )
             Icon(if (yearMode) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = CalendarMuted, modifier = Modifier.padding(start = 4.dp).size(20.dp))
             }
-            if (!yearMode) Column(horizontalAlignment = Alignment.End) {
+            if (!yearMode) Column(Modifier.widthIn(max = 168.dp), horizontalAlignment = Alignment.End) {
                 Text(formatDh(viewModel.earnedForMonth(month.toString())), color = CalendarAccent, style = MaterialTheme.typography.titleMedium)
                 Text("Month earned", color = CalendarMuted, style = MaterialTheme.typography.labelSmall)
             }
             Box {
                 IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Menu") }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(text = { Text("Day details · ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMM yyyy"))}") }, onClick = { showMenu = false; showDay = true })
                     DropdownMenuItem(text = { Text("Pay rates") }, onClick = { showMenu = false; openRates() })
                     DropdownMenuItem(text = { Text("Expenses") }, onClick = { showMenu = false; openExpenses() })
-                    DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base); selectedDate = LocalDate.now().toString() }; yearMode = false })
+                    if (yearMode) DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.requestScrollToPage(now.year * 12 + now.monthValue - 1 - base); selectedDate = LocalDate.now().toString() }; yearMode = false })
                 }
             }
         }
@@ -114,14 +117,14 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
             Text("Swipe to change month", color = CalendarMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             TextButton(onClick = { scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base); selectedDate = LocalDate.now().toString() } }) { Text("Today") }
         }
-        SharedTransitionLayout(Modifier.weight(1f).fillMaxWidth()) {
-            AnimatedContent(yearMode, label = "Calendar hierarchy") { overview ->
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            AnimatedContent(yearMode, transitionSpec = { (fadeIn(tween(180)) togetherWith fadeOut(tween(180))).using(null) }, label = "Calendar hierarchy") { overview ->
                 if (overview) {
-                    LaunchedEffect(year, selectedIndex) {
-                        withFrameNanos { }
-                        if (year == (base + selectedIndex) / 12) selectedMonthPosition.bringIntoView()
-                    }
-                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                    val density = LocalDensity.current
+                    val rowHeight = with(density) { MaterialTheme.typography.labelLarge.lineHeight.toDp() } + (112 * density.fontScale).dp + 36.dp
+                    val selectedRow = ((base + selectedIndex) % 12) / yearColumns
+                    val initialScroll = with(density) { (48.dp + rowHeight * (selectedRow + 1) - (pageHeight - 64.dp)).coerceAtLeast(0.dp).roundToPx() }
+                    Column(Modifier.fillMaxWidth().wrapContentSize(Alignment.TopStart, unbounded = true).width(contentWidth).height(pageHeight - 64.dp).verticalScroll(rememberScrollState(initial = initialScroll))) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onClick = { if (year > 1900) year-- }) { Text("‹ ${year - 1}", color = CalendarMuted) }
                             TextButton(onClick = { if (year < 2099) year++ }) { Text("${year + 1} ›", color = CalendarMuted) }
@@ -131,19 +134,19 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                 repeat(yearColumns) { column ->
                                     val item = YearMonth.of(year, row * yearColumns + column + 1)
                                     val index = item.year * 12 + item.monthValue - 1 - base
-                                    Column(Modifier.weight(1f).padding(vertical = 8.dp).then(if (index == selectedIndex) Modifier.bringIntoViewRequester(selectedMonthPosition).sharedBounds(
+                                    Column(Modifier.weight(1f).then(if (index == selectedIndex) Modifier.sharedBounds(
                                         rememberSharedContentState("month-$index"), this@AnimatedContent,
                                         boundsTransform = { _, _ -> tween(300) },
-                                    ) else Modifier).clickable {
+                                    ) else Modifier).padding(vertical = 8.dp).clickable {
                                         selectedIndex = index
                                         scope.launch {
                                             // Let the selected thumbnail register its shared bounds before it exits.
                                             withFrameNanos { }
-                                            pager.scrollToPage(index)
+                                            pager.requestScrollToPage(index)
                                             withFrameNanos { }
                                             yearMode = false
                                         }
-                                    }.semantics { contentDescription = "${item.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${item.year}"; role = Role.Button }.border(if (item == month) 1.dp else 0.dp, if (item == month) CalendarAccent else Color.Transparent, MaterialTheme.shapes.small).padding(6.dp)) {
+                                    }.semantics { contentDescription = "${item.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${item.year}"; role = Role.Button; selected = item == month }.border(if (item == month) 1.dp else 0.dp, if (item == month) CalendarAccent else Color.Transparent, MaterialTheme.shapes.small).padding(6.dp)) {
                                         Text(item.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()), color = if (item == month) CalendarAccent else CalendarInk, style = MaterialTheme.typography.labelLarge)
                                         MiniMonth(item, worked)
                                     }
@@ -152,12 +155,14 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                         }
                     }
                 } else {
-                    HorizontalPager(pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
+                    // Match an eager container, not a pager page created during lazy measurement.
+                    Box(Modifier.sharedBounds(
+                        rememberSharedContentState("month-$selectedIndex"), this@AnimatedContent,
+                        boundsTransform = { _, _ -> tween(300) },
+                    ).fillMaxSize()) {
+                    HorizontalPager(pager, modifier = Modifier.fillMaxSize()) { page ->
                         val item = YearMonth.of((base + page) / 12, (base + page) % 12 + 1)
-                        Column(Modifier.fillMaxSize().then(if (page == selectedIndex) Modifier.sharedBounds(
-                            rememberSharedContentState("month-$page"), this@AnimatedContent,
-                            boundsTransform = { _, _ -> tween(300) },
-                        ) else Modifier)) {
+                        Column(Modifier.fillMaxSize()) {
                             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                                 listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEach {
                                     Text(it, color = CalendarMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
@@ -203,10 +208,12 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                             }
                         }
                     }
+                    }
                 }
             }
         }
-        if (!yearMode) {
+        AnimatedVisibility(visible = !yearMode, enter = fadeIn(tween(120, delayMillis = 300)), exit = fadeOut(tween(90))) {
+        Column {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(Modifier.fillMaxWidth().clickable { showDay = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -235,6 +242,8 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         }
         Spacer(Modifier.height(16.dp))
         }
+        }
+    }
     }
     }
     }
@@ -243,18 +252,22 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
 @Composable
 private fun MiniMonth(month: YearMonth, worked: Set<String>) {
     val offset = month.atDay(1).dayOfWeek.value - 1
-    Column(Modifier.padding(top = 8.dp)) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
-            listOf("M", "T", "W", "T", "F", "S", "S").forEach { Text(it, color = CalendarInk, fontSize = 9.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f)) }
+    val fontScale = LocalDensity.current.fontScale
+    val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textAlign = android.graphics.Paint.Align.CENTER } }
+    // One drawing per thumbnail keeps opening the year from composing 588 tiny Text nodes.
+    Canvas(Modifier.fillMaxWidth().padding(top = 8.dp).height((112 * fontScale).dp)) {
+        val columnWidth = size.width / 7
+        val rowHeight = size.height / 7
+        paint.textSize = 10.sp.toPx()
+        val baselineOffset = -(paint.ascent() + paint.descent()) / 2
+        listOf("M", "T", "W", "T", "F", "S", "S").forEachIndexed { column, label ->
+            paint.color = android.graphics.Color.rgb(246, 244, 240)
+            drawContext.canvas.nativeCanvas.drawText(label, columnWidth * (column + 0.5f), rowHeight * 0.5f + baselineOffset, paint)
         }
-        repeat(6) { row ->
-            Row(Modifier.fillMaxWidth()) {
-                repeat(7) { column ->
-                    val day = row * 7 + column - offset + 1
-                    val valid = day in 1..month.lengthOfMonth()
-                    Text(if (valid) day.toString() else "", fontSize = 10.sp, lineHeight = 13.sp, textAlign = TextAlign.Center, color = if (valid && month.atDay(day).toString() in worked) CalendarAccent else CalendarMuted, modifier = Modifier.weight(1f).heightIn(min = 14.dp))
-                }
-            }
+        repeat(month.lengthOfMonth()) { index ->
+            val slot = index + offset
+            paint.color = if (month.atDay(index + 1).toString() in worked) android.graphics.Color.rgb(201, 164, 106) else android.graphics.Color.rgb(165, 161, 155)
+            drawContext.canvas.nativeCanvas.drawText((index + 1).toString(), columnWidth * (slot % 7 + 0.5f), rowHeight * (slot / 7 + 1.5f) + baselineOffset, paint)
         }
     }
 }

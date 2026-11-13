@@ -71,7 +71,7 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
                     Text("Shop income", style = MaterialTheme.typography.titleMedium)
                     Text(existing?.let { DecimalFormat("#,##0.00").format(BigDecimal.valueOf(it.amountCents, 2)) + " DH" } ?: "Not recorded", color = if (existing == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary, style = if (existing == null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleLarge)
                 }
-                IconButton(onClick = { editor = "income" }) { Icon(if (existing == null) Icons.Default.Add else Icons.Default.Edit, "Edit shop income", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(onClick = { editor = "income" }) { Icon(if (existing == null) Icons.Default.Add else Icons.Default.Edit, if (existing == null) "Add shop income" else "Edit shop income", tint = MaterialTheme.colorScheme.primary) }
             }
             Text("Separate from your pay", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             if (!existing?.notes.isNullOrBlank()) Text(existing!!.notes, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)

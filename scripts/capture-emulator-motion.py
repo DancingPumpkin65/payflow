@@ -1,6 +1,8 @@
 """Record real Payflow launch or hierarchy motion on an already configured emulator."""
 
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -59,4 +61,20 @@ if recorder.returncode:
     raise RuntimeError(f"Screen recording failed: {recorder.returncode}")
 args.output.parent.mkdir(parents=True, exist_ok=True)
 command("pull", remote, str(args.output))
+apk = command("shell", "pm", "path", package).decode().strip().removeprefix("package:")
+metadata = {
+    "package": package,
+    "mode": args.mode,
+    "serial": args.serial,
+    "sdk": command("shell", "getprop", "ro.build.version.sdk").decode().strip(),
+    "screen": command("shell", "wm", "size").decode().strip(),
+    "density": command("shell", "wm", "density").decode().strip(),
+    "font_scale": command("shell", "settings", "get", "system", "font_scale").decode().strip(),
+    "animator_scale": command("shell", "settings", "get", "global", "animator_duration_scale").decode().strip(),
+    "apk_sha256": command("shell", "sha256sum", apk).decode().split()[0],
+    "recording_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
+    "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip(),
+    "tracked_app_changes": bool(subprocess.check_output(["git", "diff", "HEAD", "--", "app"])),
+}
+args.output.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 print(args.output.resolve())
