@@ -17,3 +17,15 @@ Round 1 reviewed b70ffcf primarily from source, not a complete screenshot set: S
 ## Current status
 
 Implementation and screenshot review in progress. No reviewer has approved the overhaul. Do not infer visual quality from green compilation or the launch-only CI screenshot.
+
+## Round 2: Huawei screenshots of fe77244
+
+Ten actual phone captures are in `docs/screenshots/round2/`. CI run 43343116616 passed. Sample records in the captures are test data, not real financial records.
+
+| Reviewer | Overall | Lowest service | Verdict |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | 8.3 | Year 6.5 | Hold |
+| GPT-6.1 Terra | 7.5 | Year 6 | Hold |
+| GPT-6 Astra | 8.1 | Year 6.5 | Hold |
+
+Agreed corrections: explicit compact thumbnail line height; remove month-specific footer from year mode; consistent neutral/gold sheet and add actions; quieter unrecorded income; singular event count. f570882 implements these corrections but requires fresh rendered evidence. Rates/expense row hierarchy, localized date entry, and form spacing remain under review. The overall goal is not achieved.
