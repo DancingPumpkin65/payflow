@@ -91,6 +91,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val pageHeight = maxOf(maxHeight, if (density.fontScale > 1.2f) 760.dp else 680.dp)
+        val yearHeight = (maxHeight - 64.dp).coerceAtLeast(120.dp)
         val rowHeight = with(density) { MaterialTheme.typography.labelLarge.lineHeight.toDp() } + (112 * density.fontScale).dp + 36.dp
         fun chooseYear() {
             if (progress.isRunning) return
@@ -99,7 +100,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
             year = month.year
             scope.launch {
                 val row = selectedIndex % 12 / columns
-                val offset = with(density) { (48.dp + rowHeight * (row + 1) - (pageHeight - 64.dp)).coerceAtLeast(0.dp).roundToPx() }
+                val offset = with(density) { (48.dp + rowHeight * (row + 1) - yearHeight).coerceAtLeast(0.dp).roundToPx() }
                 yearScroll.scrollTo(offset)
                 withFrameNanos { }
                 yearMode = true
@@ -140,7 +141,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     // Keep both endpoints measured. Only the month layer moves, so
                     // neither lazy composition nor parent reflow stalls the first frame.
-                    Column(Modifier.fillMaxSize().zIndex(if (yearEnabled) 2f else 0f).graphicsLayer { alpha = 1f - progress.value }
+                    Column(Modifier.fillMaxWidth().height(yearHeight).zIndex(if (yearEnabled) 2f else 0f).graphicsLayer { alpha = 1f - progress.value }
                         .then(if (!yearMode) Modifier.clearAndSetSemantics { } else Modifier).verticalScroll(yearScroll, enabled = yearEnabled)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(enabled = yearEnabled && year > 1900, onClick = { year-- }) { Text("‹ ${year - 1}", color = CalendarMuted) }
