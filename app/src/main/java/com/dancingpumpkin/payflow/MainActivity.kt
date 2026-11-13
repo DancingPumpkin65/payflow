@@ -17,6 +17,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -118,17 +120,25 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     Column {
     val title = month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + " " + month.year
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = previous) { Text("‹", color = Ink, style = MaterialTheme.typography.headlineMedium) }
-        TextButton(onClick = zoomOut, modifier = Modifier.weight(1f)) { Text(title, color = Ink, style = MaterialTheme.typography.titleLarge) }
+        TextButton(onClick = zoomOut, modifier = Modifier.weight(1f)) { Text(title, color = Ink, style = MaterialTheme.typography.titleMedium) }
         Column(horizontalAlignment = Alignment.End) { Text(money(monthIncome), color = Accent, style = MaterialTheme.typography.titleMedium); Text("this month", color = Muted, style = MaterialTheme.typography.labelSmall) }
-        TextButton(onClick = next) { Text("›", color = Ink, style = MaterialTheme.typography.headlineMedium) }
+    }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        TextButton(onClick = previous) { Text("‹ Previous", color = Muted) }
+        TextButton(onClick = next) { Text("Next ›", color = Muted) }
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 20.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         MoneyColumn("Earned", totals.earnedCents, Ink); MoneyColumn("Spent", totals.spentCents, Ink); MoneyColumn("Net", totals.netCents, Accent)
     }
     Row(Modifier.fillMaxWidth()) { listOf("S", "M", "T", "W", "T", "F", "S").forEach { Text(it, color = Muted, textAlign = TextAlign.Center, modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelSmall) } }
     val first = month.atDay(1); val start = first.minusDays((first.dayOfWeek.value % 7).toLong())
-    Column(Modifier.padding(top = 6.dp)) { repeat(6) { row -> Row(Modifier.fillMaxWidth()) { repeat(7) { column -> val date = start.plusDays((row * 7 + column).toLong()); DayCell(date, date.month == month.month, date.dayOfWeek, date.toString() in workedDates, { toggle(date.toString()) }) } } } }
+    AnimatedContent(month, transitionSpec = {
+        val direction = if (targetState > initialState) 1 else -1
+        slideInHorizontally(tween(200)) { it * direction }.togetherWith(slideOutHorizontally(tween(200)) { -it * direction })
+    }, label = "Month navigation") { displayed ->
+        val gridStart = displayed.atDay(1).minusDays((displayed.atDay(1).dayOfWeek.value % 7).toLong())
+        Column(Modifier.padding(top = 6.dp)) { repeat(6) { row -> Row(Modifier.fillMaxWidth()) { repeat(7) { column -> val date = gridStart.plusDays((row * 7 + column).toLong()); DayCell(date, date.month == displayed.month, date.dayOfWeek, date.toString() in workedDates, { toggle(date.toString()) }) } } } }
+    }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         TextButton(onClick = openRates) { Text("Set daily rate", color = Accent) }
     }
