@@ -20,11 +20,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -57,9 +62,15 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var showDay by rememberSaveable { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val yearColumns = if (LocalConfiguration.current.screenWidthDp < 400 || LocalDensity.current.fontScale > 1.15f) 2 else 3
+    val selectedMonthPosition = remember { BringIntoViewRequester() }
     val month = YearMonth.of((base + pager.currentPage) / 12, (base + pager.currentPage) % 12 + 1)
     val totals = viewModel.totals()
     val worked = remember(state.workDays) { state.workDays.map { it.date }.toSet() }
+    LaunchedEffect(pager.settledPage) {
+        val visible = YearMonth.of((base + pager.settledPage) / 12, (base + pager.settledPage) % 12 + 1)
+        if (YearMonth.from(LocalDate.parse(selectedDate)) != visible) selectedDate = visible.atDay(1).toString()
+    }
     BackHandler(yearMode) { yearMode = false }
     if (showDay) DayDetailsSheet(LocalDate.parse(selectedDate), state, viewModel) { showDay = false }
 
@@ -72,37 +83,41 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 modifier = Modifier.weight(1f).clickable {
                     selectedIndex = pager.currentPage
                     year = month.year
-                    yearMode = !yearMode
+                    scope.launch { withFrameNanos { }; yearMode = !yearMode }
                 }.padding(vertical = 12.dp).semantics { role = Role.Button; contentDescription = "Choose month and year" },
             )
-            Column(horizontalAlignment = Alignment.End) {
+            if (!yearMode) Column(horizontalAlignment = Alignment.End) {
                 Text(formatDh(viewModel.earnedForMonth(month.toString())), color = CalendarAccent, style = MaterialTheme.typography.titleMedium)
                 Text("Month earned", color = CalendarMuted, style = MaterialTheme.typography.labelSmall)
             }
             Box {
                 IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Menu") }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(text = { Text("Day events and shop income") }, onClick = { showMenu = false; showDay = true })
+                    DropdownMenuItem(text = { Text("Day details · ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMM yyyy"))}") }, onClick = { showMenu = false; showDay = true })
                     DropdownMenuItem(text = { Text("Pay rates") }, onClick = { showMenu = false; openRates() })
                     DropdownMenuItem(text = { Text("Expenses") }, onClick = { showMenu = false; openExpenses() })
-                    DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base) }; yearMode = false })
+                    DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base); selectedDate = LocalDate.now().toString() }; yearMode = false })
                 }
             }
         }
         SharedTransitionLayout(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(yearMode, label = "Calendar hierarchy") { overview ->
                 if (overview) {
+                    LaunchedEffect(year, selectedIndex) {
+                        withFrameNanos { }
+                        if (year == (base + selectedIndex) / 12) selectedMonthPosition.bringIntoView()
+                    }
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onClick = { if (year > 1900) year-- }) { Text("‹ ${year - 1}", color = CalendarMuted) }
                             TextButton(onClick = { if (year < 2099) year++ }) { Text("${year + 1} ›", color = CalendarMuted) }
                         }
-                        repeat(4) { row ->
+                        repeat(12 / yearColumns) { row ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                repeat(3) { column ->
-                                    val item = YearMonth.of(year, row * 3 + column + 1)
+                                repeat(yearColumns) { column ->
+                                    val item = YearMonth.of(year, row * yearColumns + column + 1)
                                     val index = item.year * 12 + item.monthValue - 1 - base
-                                    Column(Modifier.weight(1f).padding(vertical = 8.dp).then(if (index == selectedIndex) Modifier.sharedBounds(
+                                    Column(Modifier.weight(1f).padding(vertical = 8.dp).then(if (index == selectedIndex) Modifier.bringIntoViewRequester(selectedMonthPosition).sharedBounds(
                                         rememberSharedContentState("month-$index"), this@AnimatedContent,
                                         boundsTransform = { _, _ -> tween(300) },
                                     ) else Modifier).clickable {
@@ -171,12 +186,22 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            listOf("Earned" to totals.earnedCents, "Spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
-                Column { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyLarge) }
+        if (!yearMode) {
+        Row(Modifier.fillMaxWidth().clickable { showDay = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = MaterialTheme.typography.titleSmall, color = CalendarInk)
+                val eventCount = state.events.count { it.date == selectedDate }
+                Text(if (eventCount == 0) "Events and shop income" else if (eventCount == 1) "1 event · Shop income" else "$eventCount events · Shop income", style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
+            }
+            Icon(Icons.Default.ChevronRight, "Open selected day", tint = CalendarMuted)
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            listOf("All earned" to totals.earnedCents, "All spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
+                Column(Modifier.weight(1f).padding(end = 8.dp)) { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyMedium) }
             }
         }
         Spacer(Modifier.height(16.dp))
+        }
     }
 }
 
@@ -189,11 +214,11 @@ private fun MiniMonth(month: YearMonth, worked: Set<String>) {
                 repeat(7) { column ->
                     val day = row * 7 + column - offset + 1
                     val valid = day in 1..month.lengthOfMonth()
-                    Text(if (valid) day.toString() else "", fontSize = 9.sp, textAlign = TextAlign.Center, color = if (valid && month.atDay(day).toString() in worked) CalendarAccent else CalendarMuted, modifier = Modifier.weight(1f).height(15.dp))
+                    Text(if (valid) day.toString() else "", fontSize = 10.sp, lineHeight = 13.sp, textAlign = TextAlign.Center, color = if (valid && month.atDay(day).toString() in worked) CalendarAccent else CalendarMuted, modifier = Modifier.weight(1f).heightIn(min = 14.dp))
                 }
             }
         }
     }
 }
 
-private fun formatDh(cents: Long) = DecimalFormat("#,##0.##").format(BigDecimal.valueOf(cents, 2)) + " DH"
+private fun formatDh(cents: Long) = DecimalFormat("#,##0.00").format(BigDecimal.valueOf(cents, 2)) + " DH"

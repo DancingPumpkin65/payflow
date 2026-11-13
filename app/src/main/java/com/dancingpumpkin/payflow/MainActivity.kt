@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +47,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
@@ -102,10 +114,13 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
         background = Black, surface = Color(0xFF151515), onBackground = Ink, onSurface = Ink,
         surfaceContainer = Color(0xFF1C1C1C), surfaceContainerHigh = Color(0xFF242424), surfaceContainerHighest = Color(0xFF2B2B2B),
         primary = Accent, onPrimary = Black, secondary = Accent, onSecondary = Black,
+        primaryContainer = Color(0xFF30291E), onPrimaryContainer = Color(0xFFEBD1A8),
+        secondaryContainer = Color(0xFF30291E), onSecondaryContainer = Color(0xFFEBD1A8),
+        surfaceContainerLow = Color(0xFF191919), surfaceContainerLowest = Black, surfaceTint = Color.Transparent,
         onSurfaceVariant = Color(0xFFC1BDB7), outline = Color(0xFF8A8680),
         error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
     )) {
-        Surface(color = Black, modifier = Modifier.fillMaxSize().graphicsLayer { alpha = launchOpacity.value }) {
+        Surface(color = Black, modifier = Modifier.fillMaxSize().safeDrawingPadding().graphicsLayer { alpha = launchOpacity.value }) {
             savedScreens.SaveableStateProvider(destination.name) {
             when (destination) {
                 Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
@@ -198,26 +213,51 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 }
 
 @Composable private fun RatesScreen(rates: List<PayRateEntity>, back: () -> Unit, add: (String, Long) -> Unit) {
-    var showDialog by remember { mutableStateOf(false) }; SimpleScreen("Pay rates", back, { showDialog = true }) { rates.forEach { Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(it.effectiveDate, color = Ink); Text(money(it.dailyAmountCents) + " / day", color = Accent) } }; if (rates.isEmpty()) Text("Add the first daily rate to calculate income.", color = Muted) }; if (showDialog) RateDialog({ date, amount -> add(date, amount); showDialog = false }, { showDialog = false })
+    var showDialog by rememberSaveable { mutableStateOf(false) }
+    SimpleScreen("Pay rates", back, { showDialog = true }) {
+        rates.asReversed().forEach { rate ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Effective from", style = MaterialTheme.typography.labelMedium, color = Muted)
+                    Text(displayDate(rate.effectiveDate), style = MaterialTheme.typography.bodyLarge, color = Ink)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(money(rate.dailyAmountCents), style = MaterialTheme.typography.titleMedium, color = Accent)
+                    Text("per day", style = MaterialTheme.typography.labelMedium, color = Muted)
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        }
+        if (rates.isEmpty()) Text("Add a daily rate to calculate your pay.", modifier = Modifier.padding(vertical = 24.dp), color = Muted)
+    }
+    if (showDialog) RateDialog({ date, amount -> add(date, amount); showDialog = false }, { showDialog = false })
 }
 
 @Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
-    var editing by remember { mutableStateOf<ExpenseEntity?>(null) }
-    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents -> update(record.copy(date = date, title = title, amountCents = cents)); editing = null }, { editing = null }) }
-    var showDialog by remember { mutableStateOf(false) }
+    var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val editing = expenses.firstOrNull { it.id == editingId }
+    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents -> update(record.copy(date = date, title = title, amountCents = cents)); editingId = null }, { editingId = null }) }
+    var showDialog by rememberSaveable { mutableStateOf(false) }
     SimpleScreen("Expenses", back, { showDialog = true }) {
         expenses.forEach { expense ->
+            var actions by remember { mutableStateOf(false) }
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(expense.title, color = Ink, modifier = Modifier.weight(1f))
-                    Text(money(expense.amountCents), color = Accent)
-                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(expense.date, color = Muted, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { editing = expense }) { Text("Edit") }
-                    TextButton(onClick = { delete(expense) }) { Text("Delete", color = Muted) }
+                    Column(Modifier.weight(1f)) {
+                        Text(expense.title, color = Ink, style = MaterialTheme.typography.bodyLarge)
+                        Text(displayDate(expense.date), color = Muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(money(expense.amountCents), color = Accent, style = MaterialTheme.typography.titleMedium)
+                    Box {
+                        IconButton(onClick = { actions = true }) { Icon(Icons.Default.MoreVert, "Actions for ${expense.title}") }
+                        DropdownMenu(expanded = actions, onDismissRequest = { actions = false }) {
+                            DropdownMenuItem(text = { Text("Edit") }, onClick = { actions = false; editingId = expense.id })
+                            DropdownMenuItem(text = { Text("Delete") }, onClick = { actions = false; delete(expense) })
+                        }
+                    }
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
         if (expenses.isEmpty()) Text("No expenses yet.", color = Muted)
     }
@@ -243,19 +283,43 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     MoneyDialog("Expense", true, null, save, dismiss)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long) -> Unit, dismiss: () -> Unit) {
-    var date by remember { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
-    var title by remember { mutableStateOf(initial?.title ?: "") }
-    var amount by remember { mutableStateOf(initial?.let { java.math.BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
+    var date by rememberSaveable { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
+    var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
+    var amount by rememberSaveable { mutableStateOf(initial?.let { java.math.BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
     val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
+    var chooseDate by rememberSaveable { mutableStateOf(false) }
     AlertDialog(onDismissRequest = dismiss, title = { Text(heading) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (expense) OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true)
-            OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, singleLine = true, isError = amount.isNotEmpty() && cents == null, supportingText = { if (amount.isNotEmpty() && cents == null) Text("Enter a positive amount with up to 2 decimals") })
-            OutlinedTextField(date, { date = it }, label = { Text(if (expense) "Date" else "Starting date") }, singleLine = true, isError = parsedDate == null, supportingText = { Text("YYYY-MM-DD") })
+            OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, isError = amount.isNotEmpty() && cents == null)
+            if (amount.isNotEmpty() && cents == null) Text("Enter a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, onClick = {
+                chooseDate = true
+            }) {
+                Column(Modifier.weight(1f).padding(vertical = 4.dp), horizontalAlignment = Alignment.Start) {
+                    Text(if (expense) "Date" else "Starting date", color = Muted, style = MaterialTheme.typography.labelMedium)
+                    Text(displayDate(date), color = Ink, style = MaterialTheme.typography.bodyLarge)
+                }
+                Icon(Icons.Default.CalendarToday, contentDescription = "Choose date", tint = Accent)
+            }
         }
     }, confirmButton = { Button(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text("Save") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
+    if (chooseDate) {
+        val picker = rememberDatePickerState(initialSelectedDateMillis = (parsedDate ?: LocalDate.now()).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(onDismissRequest = { chooseDate = false }, confirmButton = {
+            TextButton(onClick = {
+                picker.selectedDateMillis?.let { date = java.time.Instant.ofEpochMilli(it).atOffset(java.time.ZoneOffset.UTC).toLocalDate().toString() }
+                chooseDate = false
+            }) { Text("Done") }
+        }, dismissButton = { TextButton(onClick = { chooseDate = false }) { Text("Cancel") } }) {
+            Text("Select date", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp))
+            DatePicker(state = picker, title = null, headline = null, showModeToggle = false)
+        }
+    }
 }
 
-private fun money(cents: Long) = java.text.DecimalFormat("#,##0.##").format(java.math.BigDecimal.valueOf(cents, 2)) + " DH"
+private fun money(cents: Long) = java.text.DecimalFormat("#,##0.00").format(java.math.BigDecimal.valueOf(cents, 2)) + " DH"
+private fun displayDate(date: String) = LocalDate.parse(date).format(DateTimeFormatter.ofPattern("d MMM yyyy"))

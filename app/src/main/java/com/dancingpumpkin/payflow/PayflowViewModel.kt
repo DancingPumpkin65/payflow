@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class PayflowState(
+    val loaded: Boolean = false,
     val workDays: List<WorkDayEntity> = emptyList(),
     val rates: List<PayRateEntity> = emptyList(),
     val expenses: List<ExpenseEntity> = emptyList(),
@@ -26,7 +27,7 @@ data class PayflowState(
 class PayflowViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = PayflowDatabase.create(application).dao()
     val state = combine(dao.observeWorkDays(), dao.observePayRates(), dao.observeExpenses(), dao.observeEvents(), dao.observeShopIncome()) { days, rates, expenses, events, shop ->
-        PayflowState(days, rates, expenses, events, shop)
+        PayflowState(loaded = true, workDays = days, rates = rates, expenses = expenses, events = events, shopIncome = shop)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PayflowState())
 
     fun toggleWorkDay(date: String) = viewModelScope.launch {
