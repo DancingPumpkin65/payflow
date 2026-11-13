@@ -16,7 +16,7 @@ Round 1 reviewed b70ffcf primarily from source, not a complete screenshot set: S
 
 ## Current status
 
-Implementation and screenshot review in progress. No reviewer has approved the overhaul. Do not infer visual quality from green compilation or the launch-only CI screenshot.
+Visual gate achieved in round 4. All three council reviewers approve every service at 9/10 or above, based on the evidence mapping below. Do not infer unobserved runtime behavior from screenshot approval.
 
 ## Round 2: Huawei screenshots of fe77244
 
@@ -41,3 +41,21 @@ Twelve phone captures are in `docs/screenshots/round3/`. The exact build and uni
 | GPT-6 Astra | 9.0 | Hold: rate/add expense/edit expense forms 8.5 due to date affordance |
 
 625ae22 adds outlined date controls with calendar icons, adapts year thumbnails to two columns with enlarged text, brings the selected month into view, and normalizes calendar cents. Fresh round-four screenshots are required. Huawei is currently unavailable; local testing is switching to Android Studio's SDK/emulator. Emulator evidence must be labeled separately from the prior physical-device captures.
+
+## Round 4: final visual approval
+
+Source: 13da293. Revised surfaces were built locally with Gradle 8.9/JDK 17 and Android Studio's SDK; `testDebugUnitTest assembleDebug` passed. The two calculation tests report zero failures/errors. Installed and launched on Android Studio's API 37 emulator, configured to 1080x2340, 480 dpi and 1.15 font scale. This is a 360dp compact-screen check, not Android 10 device equivalence.
+
+New captures in `docs/screenshots/round4-emulator/` cover month, two year-scroll positions, rate form, new/edit expense, and the themed date picker. The settled year-top image replaces a transient capture that omitted chrome. Unchanged agendas, event/shop forms, rate/expense lists and menu retain the actual Huawei evidence in round3; each reviewer explicitly retained their approval for those surfaces.
+
+| Reviewer | Round 1 | Round 2 | Round 3 | Round 4 | Every service >=9 |
+| --- | --- | --- | --- | --- | --- |
+| GPT-6.1 Sol | 7 | 8.3 | 9.1 | 9.2 | Yes |
+| GPT-6.1 Terra | 6 | 7.5 | 8 | 9 | Yes |
+| GPT-6 Astra | 6 | 8.1 | 9.0 | 9.2 | Yes |
+
+All three independently inspected screenshots and approve the final visual set. Terra's minimum score is 9 on every service. Sol's final service scores range from 9.1 to 9.3; Astra's range from 9.0 to 9.2.
+
+## Validation limits
+
+The earlier Huawei checks exercised swiping, Back, date entries, and save/reopen with sample data. The local emulator check exercised install/launch and date-picker entry/dismissal. Screenshots do not prove frame-by-frame motion, all keyboard layouts, migration safety, accessibility services or rotation paths. These remain engineering checks beyond this screenshot-design approval. The PR remains open for user review; no merge or production release is implied.
