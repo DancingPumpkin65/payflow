@@ -45,6 +45,12 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
                 }
                 IconButton(onClick = dismiss) { Icon(Icons.Default.Close, "Close day") }
             }
+            val worked = state.workDays.any { it.date == key }
+            val rate = state.rates.filter { it.effectiveDate <= key }.maxByOrNull { it.effectiveDate }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (worked) "Worked" else "Not worked", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                Text(if (worked && rate != null) DecimalFormat("#,##0.00").format(BigDecimal.valueOf(rate.dailyAmountCents, 2)) + " DH earned" else if (worked) "No pay rate set" else "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Events", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = { editor = "event" }) { Icon(Icons.Default.Add, "Add event", tint = MaterialTheme.colorScheme.primary) }
@@ -67,6 +73,7 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
                 }
                 IconButton(onClick = { editor = "income" }) { Icon(if (existing == null) Icons.Default.Add else Icons.Default.Edit, "Edit shop income", tint = MaterialTheme.colorScheme.primary) }
             }
+            Text("Separate from your pay", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             if (!existing?.notes.isNullOrBlank()) Text(existing!!.notes, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
@@ -89,6 +96,6 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
             if (editor == "event") { model.addEvent(DayEventEntity(date = key, title = title.trim(), notes = eventNotes.trim())); title = ""; eventNotes = "" }
             else model.saveShopIncome(ShopIncomeEntity(key, cents!!, notes.trim()))
             editor = null
-        }) { Text("Save") } }, dismissButton = { TextButton(onClick = { editor = null }) { Text("Cancel") } },
+        }) { Text(if (editor == "event") "Add event" else "Save income") } }, dismissButton = { TextButton(onClick = { editor = null }) { Text("Cancel") } },
     )
 }

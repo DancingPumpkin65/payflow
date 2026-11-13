@@ -28,6 +28,9 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -105,8 +108,8 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 
 @Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
     val launchOpacity = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { launchOpacity.animateTo(1f, tween(220)) }
     val state by viewModel.state.collectAsState()
+    LaunchedEffect(state.loaded) { if (state.loaded) launchOpacity.animateTo(1f, tween(220)) }
     var destination by rememberSaveable { mutableStateOf(Destination.CALENDAR) }
     val savedScreens = rememberSaveableStateHolder()
     BackHandler(destination != Destination.CALENDAR) { destination = Destination.CALENDAR }
@@ -120,12 +123,20 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
         onSurfaceVariant = Color(0xFFC1BDB7), outline = Color(0xFF8A8680),
         error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
     )) {
-        Surface(color = Black, modifier = Modifier.fillMaxSize().safeDrawingPadding().graphicsLayer { alpha = launchOpacity.value }) {
+        Surface(color = Black, modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+            if (!state.loaded) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(painterResource(R.drawable.ic_payflow), null, modifier = Modifier.size(108.dp))
+                Text("Payflow", style = MaterialTheme.typography.titleLarge, color = Ink)
+                Spacer(Modifier.height(24.dp))
+                CircularProgressIndicator(Modifier.size(24.dp), color = Accent, strokeWidth = 2.dp)
+                Text("Opening your calendar", style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 12.dp))
+            } else Box(Modifier.fillMaxSize().graphicsLayer { alpha = launchOpacity.value }) {
             savedScreens.SaveableStateProvider(destination.name) {
             when (destination) {
                 Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
                 Destination.RATES -> RatesScreen(state.rates, { destination = Destination.CALENDAR }, viewModel::addRate)
                 Destination.EXPENSES -> ExpensesScreen(state.expenses, { destination = Destination.CALENDAR }, viewModel::addExpense, viewModel::deleteExpense, viewModel::updateExpense)
+            }
             }
             }
         }
@@ -276,11 +287,11 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 }
 
 @Composable private fun RateDialog(save: (String, Long) -> Unit, dismiss: () -> Unit) {
-    MoneyDialog("Daily rate", false, null, { date, _, amount -> save(date, amount) }, dismiss)
+    MoneyDialog("Set daily pay", false, null, { date, _, amount -> save(date, amount) }, dismiss)
 }
 
 @Composable private fun ExpenseDialog(save: (String, String, Long) -> Unit, dismiss: () -> Unit) {
-    MoneyDialog("Expense", true, null, save, dismiss)
+    MoneyDialog("New expense", true, null, save, dismiss)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -306,7 +317,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
                 Icon(Icons.Default.CalendarToday, contentDescription = "Choose date", tint = Accent)
             }
         }
-    }, confirmButton = { Button(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text("Save") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
+    }, confirmButton = { Button(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text(if (!expense) "Save rate" else if (initial == null) "Add expense" else "Save changes") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
     if (chooseDate) {
         val picker = rememberDatePickerState(initialSelectedDateMillis = (parsedDate ?: LocalDate.now()).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(onDismissRequest = { chooseDate = false }, confirmButton = {
