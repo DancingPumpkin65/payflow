@@ -202,9 +202,10 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 }
 
 @Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
-    var editing by remember { mutableStateOf<ExpenseEntity?>(null) }
-    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents -> update(record.copy(date = date, title = title, amountCents = cents)); editing = null }, { editing = null }) }
-    var showDialog by remember { mutableStateOf(false) }
+    var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val editing = expenses.firstOrNull { it.id == editingId }
+    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents -> update(record.copy(date = date, title = title, amountCents = cents)); editingId = null }, { editingId = null }) }
+    var showDialog by rememberSaveable { mutableStateOf(false) }
     SimpleScreen("Expenses", back, { showDialog = true }) {
         expenses.forEach { expense ->
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
@@ -214,7 +215,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(expense.date, color = Muted, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { editing = expense }) { Text("Edit") }
+                    TextButton(onClick = { editingId = expense.id }) { Text("Edit") }
                     TextButton(onClick = { delete(expense) }) { Text("Delete", color = Muted) }
                 }
             }
@@ -244,9 +245,9 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 }
 
 @Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long) -> Unit, dismiss: () -> Unit) {
-    var date by remember { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
-    var title by remember { mutableStateOf(initial?.title ?: "") }
-    var amount by remember { mutableStateOf(initial?.let { java.math.BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
+    var date by rememberSaveable { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
+    var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
+    var amount by rememberSaveable { mutableStateOf(initial?.let { java.math.BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
     val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
     AlertDialog(onDismissRequest = dismiss, title = { Text(heading) }, text = {

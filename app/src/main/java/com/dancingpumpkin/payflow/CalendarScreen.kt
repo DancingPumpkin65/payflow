@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -175,7 +176,15 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.fillMaxWidth().clickable { showDay = true }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("EEE, d MMM")), style = MaterialTheme.typography.titleSmall, color = CalendarInk)
+                val eventCount = state.events.count { it.date == selectedDate }
+                Text(if (eventCount == 0) "Events and shop income" else "$eventCount events · Shop income", style = MaterialTheme.typography.bodySmall, color = CalendarMuted)
+            }
+            Icon(Icons.Default.ChevronRight, "Open selected day", tint = CalendarMuted)
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             listOf("Earned" to totals.earnedCents, "Spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
                 Column(Modifier.weight(1f).padding(end = 8.dp)) { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyMedium) }
             }
