@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.dancingpumpkin.payflow.data.DayEventEntity
 import com.dancingpumpkin.payflow.data.ShopIncomeEntity
 import java.math.BigDecimal
@@ -78,6 +79,7 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
         }
     }
     if (editor != null) AlertDialog(
+        modifier = Modifier.safeDrawingPadding().imePadding(), properties = DialogProperties(decorFitsSystemWindows = false),
         onDismissRequest = { editor = null }, title = { Text(if (editor == "event") "New event" else "Shop income") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
