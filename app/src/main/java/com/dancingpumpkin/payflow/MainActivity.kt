@@ -54,6 +54,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
@@ -279,21 +283,21 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     MoneyDialog("Expense", true, null, save, dismiss)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long) -> Unit, dismiss: () -> Unit) {
     var date by rememberSaveable { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
     var amount by rememberSaveable { mutableStateOf(initial?.let { java.math.BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
     val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
-    val context = LocalContext.current
+    var chooseDate by rememberSaveable { mutableStateOf(false) }
     AlertDialog(onDismissRequest = dismiss, title = { Text(heading) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (expense) OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true)
             OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, isError = amount.isNotEmpty() && cents == null)
             if (amount.isNotEmpty() && cents == null) Text("Enter a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             OutlinedButton(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, onClick = {
-                val selected = parsedDate ?: LocalDate.now()
-                android.app.DatePickerDialog(context, { _, y, m, d -> date = LocalDate.of(y, m + 1, d).toString() }, selected.year, selected.monthValue - 1, selected.dayOfMonth).show()
+                chooseDate = true
             }) {
                 Column(Modifier.weight(1f).padding(vertical = 4.dp), horizontalAlignment = Alignment.Start) {
                     Text(if (expense) "Date" else "Starting date", color = Muted, style = MaterialTheme.typography.labelMedium)
@@ -303,6 +307,18 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
             }
         }
     }, confirmButton = { Button(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text("Save") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
+    if (chooseDate) {
+        val picker = rememberDatePickerState(initialSelectedDateMillis = (parsedDate ?: LocalDate.now()).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())
+        DatePickerDialog(onDismissRequest = { chooseDate = false }, confirmButton = {
+            TextButton(onClick = {
+                picker.selectedDateMillis?.let { date = java.time.Instant.ofEpochMilli(it).atOffset(java.time.ZoneOffset.UTC).toLocalDate().toString() }
+                chooseDate = false
+            }) { Text("Done") }
+        }, dismissButton = { TextButton(onClick = { chooseDate = false }) { Text("Cancel") } }) {
+            Text("Select date", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(20.dp))
+            DatePicker(state = picker, title = null, headline = null, showModeToggle = false)
+        }
+    }
 }
 
 private fun money(cents: Long) = java.text.DecimalFormat("#,##0.00").format(java.math.BigDecimal.valueOf(cents, 2)) + " DH"
