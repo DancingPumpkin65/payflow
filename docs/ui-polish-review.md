@@ -29,3 +29,15 @@ Ten actual phone captures are in `docs/screenshots/round2/`. CI run 43343116616 
 | GPT-6 Astra | 8.1 | Year 6.5 | Hold |
 
 Agreed corrections: explicit compact thumbnail line height; remove month-specific footer from year mode; consistent neutral/gold sheet and add actions; quieter unrecorded income; singular event count. f570882 implements these corrections but requires fresh rendered evidence. Rates/expense row hierarchy, localized date entry, and form spacing remain under review. The overall goal is not achieved.
+
+## Round 3: Huawei screenshots of e46d98e
+
+Twelve phone captures are in `docs/screenshots/round3/`. The exact build and unit test job passed in run 43344362840. Each reviewer inspected all twelve images.
+
+| Reviewer | Overall | Verdict |
+| --- | --- | --- |
+| GPT-6.1 Sol | 9.1 | Approve visual set, every service at least 9 |
+| GPT-6.1 Terra | 8 | Hold: crowded year numerals; date controls resemble static metadata |
+| GPT-6 Astra | 9.0 | Hold: rate/add expense/edit expense forms 8.5 due to date affordance |
+
+625ae22 adds outlined date controls with calendar icons, adapts year thumbnails to two columns with enlarged text, brings the selected month into view, and normalizes calendar cents. Fresh round-four screenshots are required. Huawei is currently unavailable; local testing is switching to Android Studio's SDK/emulator. Emulator evidence must be labeled separately from the prior physical-device captures.
