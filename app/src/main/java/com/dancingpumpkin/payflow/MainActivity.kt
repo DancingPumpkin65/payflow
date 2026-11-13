@@ -51,6 +51,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
@@ -288,14 +290,15 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
             if (expense) OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true)
             OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, isError = amount.isNotEmpty() && cents == null)
             if (amount.isNotEmpty() && cents == null) Text("Enter a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = {
+            OutlinedButton(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, onClick = {
                 val selected = parsedDate ?: LocalDate.now()
                 android.app.DatePickerDialog(context, { _, y, m, d -> date = LocalDate.of(y, m + 1, d).toString() }, selected.year, selected.monthValue - 1, selected.dayOfMonth).show()
             }) {
-                Column(Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f).padding(vertical = 4.dp), horizontalAlignment = Alignment.Start) {
                     Text(if (expense) "Date" else "Starting date", color = Muted, style = MaterialTheme.typography.labelMedium)
                     Text(displayDate(date), color = Ink, style = MaterialTheme.typography.bodyLarge)
                 }
+                Icon(Icons.Default.CalendarToday, contentDescription = "Choose date", tint = Accent)
             }
         }
     }, confirmButton = { Button(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text("Save") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })

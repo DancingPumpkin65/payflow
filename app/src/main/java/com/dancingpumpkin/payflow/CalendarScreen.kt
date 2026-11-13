@@ -26,6 +26,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +61,8 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var showDay by rememberSaveable { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val yearColumns = if (LocalDensity.current.fontScale > 1.15f) 2 else 3
+    val selectedMonthPosition = remember { BringIntoViewRequester() }
     val month = YearMonth.of((base + pager.currentPage) / 12, (base + pager.currentPage) % 12 + 1)
     val totals = viewModel.totals()
     val worked = remember(state.workDays) { state.workDays.map { it.date }.toSet() }
@@ -97,17 +102,21 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         SharedTransitionLayout(Modifier.weight(1f).fillMaxWidth()) {
             AnimatedContent(yearMode, label = "Calendar hierarchy") { overview ->
                 if (overview) {
+                    LaunchedEffect(year, selectedIndex) {
+                        withFrameNanos { }
+                        if (year == (base + selectedIndex) / 12) selectedMonthPosition.bringIntoView()
+                    }
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(onClick = { if (year > 1900) year-- }) { Text("‹ ${year - 1}", color = CalendarMuted) }
                             TextButton(onClick = { if (year < 2099) year++ }) { Text("${year + 1} ›", color = CalendarMuted) }
                         }
-                        repeat(4) { row ->
+                        repeat(12 / yearColumns) { row ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                repeat(3) { column ->
-                                    val item = YearMonth.of(year, row * 3 + column + 1)
+                                repeat(yearColumns) { column ->
+                                    val item = YearMonth.of(year, row * yearColumns + column + 1)
                                     val index = item.year * 12 + item.monthValue - 1 - base
-                                    Column(Modifier.weight(1f).padding(vertical = 8.dp).then(if (index == selectedIndex) Modifier.sharedBounds(
+                                    Column(Modifier.weight(1f).padding(vertical = 8.dp).then(if (index == selectedIndex) Modifier.bringIntoViewRequester(selectedMonthPosition).sharedBounds(
                                         rememberSharedContentState("month-$index"), this@AnimatedContent,
                                         boundsTransform = { _, _ -> tween(300) },
                                     ) else Modifier).clickable {
@@ -211,4 +220,4 @@ private fun MiniMonth(month: YearMonth, worked: Set<String>) {
     }
 }
 
-private fun formatDh(cents: Long) = DecimalFormat("#,##0.##").format(BigDecimal.valueOf(cents, 2)) + " DH"
+private fun formatDh(cents: Long) = DecimalFormat("#,##0.00").format(BigDecimal.valueOf(cents, 2)) + " DH"
