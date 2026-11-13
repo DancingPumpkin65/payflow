@@ -60,6 +60,10 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     val month = YearMonth.of((base + pager.currentPage) / 12, (base + pager.currentPage) % 12 + 1)
     val totals = viewModel.totals()
     val worked = remember(state.workDays) { state.workDays.map { it.date }.toSet() }
+    LaunchedEffect(pager.settledPage) {
+        val visible = YearMonth.of((base + pager.settledPage) / 12, (base + pager.settledPage) % 12 + 1)
+        if (YearMonth.from(LocalDate.parse(selectedDate)) != visible) selectedDate = visible.atDay(1).toString()
+    }
     BackHandler(yearMode) { yearMode = false }
     if (showDay) DayDetailsSheet(LocalDate.parse(selectedDate), state, viewModel) { showDay = false }
 
@@ -72,7 +76,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 modifier = Modifier.weight(1f).clickable {
                     selectedIndex = pager.currentPage
                     year = month.year
-                    yearMode = !yearMode
+                    scope.launch { withFrameNanos { }; yearMode = !yearMode }
                 }.padding(vertical = 12.dp).semantics { role = Role.Button; contentDescription = "Choose month and year" },
             )
             Column(horizontalAlignment = Alignment.End) {
@@ -82,10 +86,10 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
             Box {
                 IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Menu") }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(text = { Text("Day events and shop income") }, onClick = { showMenu = false; showDay = true })
+                    DropdownMenuItem(text = { Text("Day details · ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMM yyyy"))}") }, onClick = { showMenu = false; showDay = true })
                     DropdownMenuItem(text = { Text("Pay rates") }, onClick = { showMenu = false; openRates() })
                     DropdownMenuItem(text = { Text("Expenses") }, onClick = { showMenu = false; openExpenses() })
-                    DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base) }; yearMode = false })
+                    DropdownMenuItem(text = { Text("Today") }, onClick = { showMenu = false; scope.launch { pager.animateScrollToPage(now.year * 12 + now.monthValue - 1 - base); selectedDate = LocalDate.now().toString() }; yearMode = false })
                 }
             }
         }
@@ -173,7 +177,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         }
         Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             listOf("Earned" to totals.earnedCents, "Spent" to totals.spentCents, "Net" to totals.netCents).forEach { (label, amount) ->
-                Column { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyLarge) }
+                Column(Modifier.weight(1f).padding(end = 8.dp)) { Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall); Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = MaterialTheme.typography.bodyMedium) }
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -189,7 +193,7 @@ private fun MiniMonth(month: YearMonth, worked: Set<String>) {
                 repeat(7) { column ->
                     val day = row * 7 + column - offset + 1
                     val valid = day in 1..month.lengthOfMonth()
-                    Text(if (valid) day.toString() else "", fontSize = 9.sp, textAlign = TextAlign.Center, color = if (valid && month.atDay(day).toString() in worked) CalendarAccent else CalendarMuted, modifier = Modifier.weight(1f).height(15.dp))
+                    Text(if (valid) day.toString() else "", fontSize = 9.sp, textAlign = TextAlign.Center, color = if (valid && month.atDay(day).toString() in worked) CalendarAccent else CalendarMuted, modifier = Modifier.weight(1f).heightIn(min = 15.dp))
                 }
             }
         }

@@ -19,6 +19,7 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: PayflowViewModel, dismiss: () -> Unit) {
+    if (!state.loaded) return
     val key = date.toString()
     val existing = state.shopIncome.firstOrNull { it.date == key }
     var title by rememberSaveable(key) { mutableStateOf("") }
@@ -29,7 +30,7 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 0..100_000_000_000L }
     ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), style = MaterialTheme.typography.titleLarge)
+            Text(date.format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy")), style = MaterialTheme.typography.titleMedium)
             Text("Events", style = MaterialTheme.typography.titleMedium)
             val events = state.events.filter { it.date == key }
             if (events.isEmpty()) Text("No events", style = MaterialTheme.typography.bodyMedium)
