@@ -46,6 +46,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
@@ -201,7 +206,24 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 }
 
 @Composable private fun RatesScreen(rates: List<PayRateEntity>, back: () -> Unit, add: (String, Long) -> Unit) {
-    var showDialog by remember { mutableStateOf(false) }; SimpleScreen("Pay rates", back, { showDialog = true }) { rates.forEach { Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(it.effectiveDate, color = Ink); Text(money(it.dailyAmountCents) + " / day", color = Accent) } }; if (rates.isEmpty()) Text("Add the first daily rate to calculate income.", color = Muted) }; if (showDialog) RateDialog({ date, amount -> add(date, amount); showDialog = false }, { showDialog = false })
+    var showDialog by rememberSaveable { mutableStateOf(false) }
+    SimpleScreen("Pay rates", back, { showDialog = true }) {
+        rates.asReversed().forEach { rate ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Effective from", style = MaterialTheme.typography.labelMedium, color = Muted)
+                    Text(displayDate(rate.effectiveDate), style = MaterialTheme.typography.bodyLarge, color = Ink)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(money(rate.dailyAmountCents), style = MaterialTheme.typography.titleMedium, color = Accent)
+                    Text("per day", style = MaterialTheme.typography.labelMedium, color = Muted)
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        }
+        if (rates.isEmpty()) Text("Add a daily rate to calculate your pay.", modifier = Modifier.padding(vertical = 24.dp), color = Muted)
+    }
+    if (showDialog) RateDialog({ date, amount -> add(date, amount); showDialog = false }, { showDialog = false })
 }
 
 @Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
@@ -211,17 +233,24 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     var showDialog by rememberSaveable { mutableStateOf(false) }
     SimpleScreen("Expenses", back, { showDialog = true }) {
         expenses.forEach { expense ->
+            var actions by remember { mutableStateOf(false) }
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(expense.title, color = Ink, modifier = Modifier.weight(1f))
-                    Text(money(expense.amountCents), color = Accent)
-                }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(expense.date, color = Muted, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { editingId = expense.id }) { Text("Edit") }
-                    TextButton(onClick = { delete(expense) }) { Text("Delete", color = Muted) }
+                    Column(Modifier.weight(1f)) {
+                        Text(expense.title, color = Ink, style = MaterialTheme.typography.bodyLarge)
+                        Text(displayDate(expense.date), color = Muted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text(money(expense.amountCents), color = Accent, style = MaterialTheme.typography.titleMedium)
+                    Box {
+                        IconButton(onClick = { actions = true }) { Icon(Icons.Default.MoreVert, "Actions for ${expense.title}") }
+                        DropdownMenu(expanded = actions, onDismissRequest = { actions = false }) {
+                            DropdownMenuItem(text = { Text("Edit") }, onClick = { actions = false; editingId = expense.id })
+                            DropdownMenuItem(text = { Text("Delete") }, onClick = { actions = false; delete(expense) })
+                        }
+                    }
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
         if (expenses.isEmpty()) Text("No expenses yet.", color = Muted)
     }
@@ -253,13 +282,24 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     var amount by rememberSaveable { mutableStateOf(initial?.let { java.math.BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
     val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
+    val context = LocalContext.current
     AlertDialog(onDismissRequest = dismiss, title = { Text(heading) }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (expense) OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true)
-            OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, singleLine = true, isError = amount.isNotEmpty() && cents == null, supportingText = { if (amount.isNotEmpty() && cents == null) Text("Enter a positive amount with up to 2 decimals") })
-            OutlinedTextField(date, { date = it }, label = { Text(if (expense) "Date" else "Starting date") }, singleLine = true, isError = parsedDate == null, supportingText = { Text("YYYY-MM-DD") })
+            OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, isError = amount.isNotEmpty() && cents == null)
+            if (amount.isNotEmpty() && cents == null) Text("Enter a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = {
+                val selected = parsedDate ?: LocalDate.now()
+                android.app.DatePickerDialog(context, { _, y, m, d -> date = LocalDate.of(y, m + 1, d).toString() }, selected.year, selected.monthValue - 1, selected.dayOfMonth).show()
+            }) {
+                Column(Modifier.fillMaxWidth()) {
+                    Text(if (expense) "Date" else "Starting date", color = Muted, style = MaterialTheme.typography.labelMedium)
+                    Text(displayDate(date), color = Ink, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
         }
     }, confirmButton = { Button(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text("Save") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
 }
 
-private fun money(cents: Long) = java.text.DecimalFormat("#,##0.##").format(java.math.BigDecimal.valueOf(cents, 2)) + " DH"
+private fun money(cents: Long) = java.text.DecimalFormat("#,##0.00").format(java.math.BigDecimal.valueOf(cents, 2)) + " DH"
+private fun displayDate(date: String) = LocalDate.parse(date).format(DateTimeFormatter.ofPattern("d MMM yyyy"))
