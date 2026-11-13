@@ -26,11 +26,12 @@ class PayflowViewModel(application: Application) : AndroidViewModel(application)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PayflowState())
 
     fun toggleWorkDay(date: String) = viewModelScope.launch {
-        if (state.value.workDays.any { it.date == date }) dao.removeWorkDay(date) else dao.addWorkDay(WorkDayEntity(date))
+        dao.toggleWorkDay(date)
     }
     fun addRate(date: String, amountCents: Long) = viewModelScope.launch { dao.addPayRate(PayRateEntity(effectiveDate = date, dailyAmountCents = amountCents)) }
     fun addExpense(date: String, title: String, amountCents: Long) = viewModelScope.launch { dao.addExpense(ExpenseEntity(date = date, title = title, amountCents = amountCents)) }
     fun deleteExpense(expense: ExpenseEntity) = viewModelScope.launch { dao.deleteExpense(expense) }
+    fun updateExpense(expense: ExpenseEntity) = viewModelScope.launch { dao.updateExpense(expense) }
     fun earnedForMonth(month: String) = IncomeCalculator.earnedForMonth(state.value.workDays, state.value.rates, month)
     fun totals() = IncomeCalculator.totals(state.value.workDays, state.value.rates, state.value.expenses)
 }

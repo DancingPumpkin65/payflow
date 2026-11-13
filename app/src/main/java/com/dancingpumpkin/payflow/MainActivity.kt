@@ -3,6 +3,14 @@ package com.dancingpumpkin.payflow
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -58,7 +66,7 @@ import java.util.Locale
 private val Black = Color(0xFF000000)
 private val Ink = Color(0xFFF6F4F0)
 private val Muted = Color(0xFF9C9994)
-private val Faint = Color(0xFF55524E)
+private val Faint = Color(0xFF85817B)
 private val Accent = Color(0xFFC9A46A)
 
 class MainActivity : ComponentActivity() {
@@ -72,12 +80,13 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 @Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
     var destination by remember { mutableStateOf(Destination.CALENDAR) }
+    BackHandler(destination != Destination.CALENDAR) { destination = Destination.CALENDAR }
     MaterialTheme(colorScheme = MaterialTheme.colorScheme.copy(background = Black, surface = Black, onBackground = Ink, onSurface = Ink, primary = Accent)) {
         Surface(color = Black, modifier = Modifier.fillMaxSize()) {
             when (destination) {
                 Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
                 Destination.RATES -> RatesScreen(state.rates, { destination = Destination.CALENDAR }, viewModel::addRate)
-                Destination.EXPENSES -> ExpensesScreen(state.expenses, { destination = Destination.CALENDAR }, viewModel::addExpense, viewModel::deleteExpense)
+                Destination.EXPENSES -> ExpensesScreen(state.expenses, { destination = Destination.CALENDAR }, viewModel::addExpense, viewModel::deleteExpense, viewModel::updateExpense)
             }
         }
     }
@@ -106,6 +115,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 }
 
 @Composable private fun MonthCalendar(month: YearMonth, workedDates: Set<String>, monthIncome: Long, totals: com.dancingpumpkin.payflow.domain.Totals, previous: () -> Unit, next: () -> Unit, zoomOut: () -> Unit, toggle: (String) -> Unit, openRates: () -> Unit) {
+    Column {
     val title = month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()) + " " + month.year
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = previous) { Text("‹", color = Ink, style = MaterialTheme.typography.headlineMedium) }
@@ -122,15 +132,16 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         TextButton(onClick = openRates) { Text("Set daily rate", color = Accent) }
     }
+    }
 }
 
 @Composable private fun MoneyColumn(label: String, cents: Long, color: Color) = Column { Text(label, color = Muted, style = MaterialTheme.typography.labelSmall); Text(money(cents), color = color, style = MaterialTheme.typography.bodyLarge) }
 
 @Composable private fun RowScope.DayCell(date: LocalDate, current: Boolean, day: DayOfWeek, worked: Boolean, onClick: () -> Unit) {
     val today = date == LocalDate.now(); val weekend = day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY
-    Box(Modifier.weight(1f).height(50.dp).padding(4.dp).clip(CircleShape).background(if (worked) Accent else Color.Transparent).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(Modifier.weight(1f).height(50.dp).semantics { contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy")) }.toggleable(value = worked, role = Role.Checkbox, onValueChange = { onClick() }).padding(6.dp).clip(CircleShape).background(if (worked) Accent else Color.Transparent), contentAlignment = Alignment.Center) {
         Text(date.dayOfMonth.toString(), color = when { worked -> Black; !current -> Faint; weekend -> Muted; else -> Ink }, style = MaterialTheme.typography.bodyMedium, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal)
-        if (today && !worked) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(4.dp).clip(CircleShape).background(Accent))
+        if (today) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp).size(4.dp).clip(CircleShape).background(if (worked) Black else Accent))
     }
 }
 
@@ -157,14 +168,52 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     var showDialog by remember { mutableStateOf(false) }; SimpleScreen("Pay rates", back, { showDialog = true }) { rates.forEach { Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(it.effectiveDate, color = Ink); Text(money(it.dailyAmountCents) + " / day", color = Accent) } }; if (rates.isEmpty()) Text("Add the first daily rate to calculate income.", color = Muted) }; if (showDialog) RateDialog({ date, amount -> add(date, amount); showDialog = false }, { showDialog = false })
 }
 
-@Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long) -> Unit, delete: (ExpenseEntity) -> Unit) {
-    var showDialog by remember { mutableStateOf(false) }; SimpleScreen("Expenses", back, { showDialog = true }) { expenses.forEach { expense -> Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { Column { Text(expense.title, color = Ink); Text(expense.date, color = Muted, style = MaterialTheme.typography.labelSmall) }; Row(verticalAlignment = Alignment.CenterVertically) { Text(money(expense.amountCents), color = Accent); TextButton(onClick = { delete(expense) }) { Text("Delete", color = Muted) } } } }; if (expenses.isEmpty()) Text("No expenses yet.", color = Muted) }; if (showDialog) ExpenseDialog({ date, title, amount -> add(date, title, amount); showDialog = false }, { showDialog = false })
+@Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
+    var editing by remember { mutableStateOf<ExpenseEntity?>(null) }
+    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents -> update(record.copy(date = date, title = title, amountCents = cents)); editing = null }, { editing = null }) }
+    var showDialog by remember { mutableStateOf(false) }
+    SimpleScreen("Expenses", back, { showDialog = true }) {
+        expenses.forEach { expense ->
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(expense.title, color = Ink, modifier = Modifier.weight(1f))
+                    Text(money(expense.amountCents), color = Accent)
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(expense.date, color = Muted, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { editing = expense }) { Text("Edit") }
+                    TextButton(onClick = { delete(expense) }) { Text("Delete", color = Muted) }
+                }
+            }
+        }
+        if (expenses.isEmpty()) Text("No expenses yet.", color = Muted)
+    }
+    if (showDialog) ExpenseDialog({ date, title, amount -> add(date, title, amount); showDialog = false }, { showDialog = false })
 }
 
-@Composable private fun SimpleScreen(title: String, back: () -> Unit, add: () -> Unit, content: @Composable () -> Unit) { Column(Modifier.fillMaxSize().padding(20.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { TextButton(onClick = back) { Text("‹ Calendar", color = Muted) }; TextButton(onClick = add) { Text("Add", color = Accent) } }; Text(title, color = Ink, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(vertical = 20.dp)); content() } }
+@Composable private fun SimpleScreen(title: String, back: () -> Unit, add: () -> Unit, content: @Composable () -> Unit) { Column(Modifier.fillMaxSize().padding(20.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { TextButton(onClick = back) { Text("‹ Calendar", color = Muted) }; TextButton(onClick = add) { Text("Add", color = Accent) } }; Text(title, color = Ink, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(vertical = 20.dp)); Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { content() } } }
 
-@Composable private fun RateDialog(save: (String, Long) -> Unit, dismiss: () -> Unit) { var date by remember { mutableStateOf(LocalDate.now().toString()) }; var amount by remember { mutableStateOf("") }; AlertDialog(onDismissRequest = dismiss, title = { Text("Daily rate") }, text = { Column { OutlinedTextField(date, { date = it }, label = { Text("Starting date") }); OutlinedTextField(amount, { amount = it }, label = { Text("DH per day") }) } }, confirmButton = { Button(onClick = { amount.toLongOrNull()?.let { save(date, it * 100) } }) { Text("Save") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } }) }
+@Composable private fun RateDialog(save: (String, Long) -> Unit, dismiss: () -> Unit) {
+    MoneyDialog("Daily rate", false, null, { date, _, amount -> save(date, amount) }, dismiss)
+}
 
-@Composable private fun ExpenseDialog(save: (String, String, Long) -> Unit, dismiss: () -> Unit) { var date by remember { mutableStateOf(LocalDate.now().toString()) }; var title by remember { mutableStateOf("") }; var amount by remember { mutableStateOf("") }; AlertDialog(onDismissRequest = dismiss, title = { Text("Expense") }, text = { Column { OutlinedTextField(title, { title = it }, label = { Text("What was it?") }); OutlinedTextField(amount, { amount = it }, label = { Text("DH") }); OutlinedTextField(date, { date = it }, label = { Text("Date") }) } }, confirmButton = { Button(onClick = { amount.toLongOrNull()?.let { save(date, title, it * 100) } }) { Text("Save") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } }) }
+@Composable private fun ExpenseDialog(save: (String, String, Long) -> Unit, dismiss: () -> Unit) {
+    MoneyDialog("Expense", true, null, save, dismiss)
+}
 
-private fun money(cents: Long) = String.format(Locale.US, "%,d DH", cents / 100)
+@Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long) -> Unit, dismiss: () -> Unit) {
+    var date by remember { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
+    var title by remember { mutableStateOf(initial?.title ?: "") }
+    var amount by remember { mutableStateOf(initial?.let { java.math.BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
+    val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
+    val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
+    AlertDialog(onDismissRequest = dismiss, title = { Text(heading) }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (expense) OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true)
+            OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, singleLine = true, isError = amount.isNotEmpty() && cents == null, supportingText = { if (amount.isNotEmpty() && cents == null) Text("Enter a positive amount with up to 2 decimals") })
+            OutlinedTextField(date, { date = it }, label = { Text(if (expense) "Date" else "Starting date") }, singleLine = true, isError = parsedDate == null, supportingText = { Text("YYYY-MM-DD") })
+        }
+    }, confirmButton = { Button(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text("Save") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
+}
+
+private fun money(cents: Long) = java.text.DecimalFormat("#,##0.##").format(java.math.BigDecimal.valueOf(cents, 2)) + " DH"
