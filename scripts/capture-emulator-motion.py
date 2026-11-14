@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import struct
 import time
 import xml.etree.ElementTree as ET
 
@@ -41,6 +42,18 @@ def center(description):
     raise RuntimeError("No fresh UI hierarchy returned")
 
 
+screen_config = command("shell", "wm", "size").decode().strip()
+expected_size = tuple(map(int, re.findall(r"(\d+)x(\d+)", screen_config)[-1]))
+for _ in range(10):
+    screenshot_size = struct.unpack(">II", command("exec-out", "screencap", "-p")[16:24])
+    if screenshot_size == expected_size:
+        break
+    time.sleep(0.2)
+else:
+    raise RuntimeError(f"Display resize has not settled: {screenshot_size} != {expected_size}")
+font_scale = command("shell", "settings", "get", "system", "font_scale").decode().strip()
+density_config = command("shell", "wm", "density").decode().strip()
+
 if args.mode == "launch":
     command("shell", "am", "force-stop", package)
 else:
@@ -61,15 +74,24 @@ if recorder.returncode:
     raise RuntimeError(f"Screen recording failed: {recorder.returncode}")
 args.output.parent.mkdir(parents=True, exist_ok=True)
 command("pull", remote, str(args.output))
+video = args.output.read_bytes()
+track = video.find(b"tkhd")
+if track < 4:
+    raise RuntimeError("Recording has no MP4 track header")
+track_end = track - 4 + struct.unpack(">I", video[track - 4:track])[0]
+video_size = tuple(value >> 16 for value in struct.unpack(">II", video[track_end - 8:track_end]))
 apk = command("shell", "pm", "path", package).decode().strip().removeprefix("package:")
 metadata = {
     "package": package,
     "mode": args.mode,
     "serial": args.serial,
     "sdk": command("shell", "getprop", "ro.build.version.sdk").decode().strip(),
-    "screen": command("shell", "wm", "size").decode().strip(),
-    "density": command("shell", "wm", "density").decode().strip(),
-    "font_scale": command("shell", "settings", "get", "system", "font_scale").decode().strip(),
+    "screen": screen_config,
+    "density": density_config,
+    "font_scale": font_scale,
+    "screencap_size_before_px": screenshot_size,
+    "video_size_px": video_size,
+    "capture_size_matches": video_size == screenshot_size,
     "animator_scale": command("shell", "settings", "get", "global", "animator_duration_scale").decode().strip(),
     "apk_sha256": command("shell", "sha256sum", apk).decode().split()[0],
     "recording_sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),
@@ -77,4 +99,6 @@ metadata = {
     "tracked_app_changes": bool(subprocess.check_output(["git", "diff", "HEAD", "--", "app"])),
 }
 args.output.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+if video_size != screenshot_size:
+    raise RuntimeError(f"Recording size {video_size} differs from settled display {screenshot_size}")
 print(args.output.resolve())
