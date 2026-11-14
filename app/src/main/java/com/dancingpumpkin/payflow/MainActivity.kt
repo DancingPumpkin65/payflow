@@ -13,6 +13,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -30,12 +31,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
@@ -74,7 +72,6 @@ import java.time.format.DateTimeFormatter
 private val Black = Color(0xFF000000)
 private val Ink = Color(0xFFF6F4F0)
 private val Muted = Color(0xFF9C9994)
-private val Faint = Color(0xFF85817B)
 private val Accent = Color(0xFFC9A46A)
 
 class MainActivity : ComponentActivity() {
@@ -88,9 +85,23 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 @Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
     val launchOpacity = remember { Animatable(0f) }
     val state by viewModel.state.collectAsState()
-    LaunchedEffect(state.loaded) { if (state.loaded) launchOpacity.animateTo(1f, tween(220)) }
+    LaunchedEffect(state.loaded) { if (state.loaded) launchOpacity.animateTo(1f, tween(220, easing = LinearOutSlowInEasing)) }
     var destination by rememberSaveable { mutableStateOf(Destination.CALENDAR) }
     val savedScreens = rememberSaveableStateHolder()
+    val typography = remember {
+        val base = Typography()
+        Typography(
+            titleLarge = base.titleLarge.copy(fontFeatureSettings = "tnum"),
+            titleMedium = base.titleMedium.copy(fontFeatureSettings = "tnum"),
+            titleSmall = base.titleSmall.copy(fontFeatureSettings = "tnum"),
+            bodyLarge = base.bodyLarge.copy(fontFeatureSettings = "tnum"),
+            bodyMedium = base.bodyMedium.copy(fontFeatureSettings = "tnum"),
+            bodySmall = base.bodySmall.copy(fontFeatureSettings = "tnum"),
+            labelLarge = base.labelLarge.copy(fontFeatureSettings = "tnum"),
+            labelMedium = base.labelMedium.copy(fontFeatureSettings = "tnum"),
+            labelSmall = base.labelSmall.copy(fontFeatureSettings = "tnum"),
+        )
+    }
     BackHandler(destination != Destination.CALENDAR) { destination = Destination.CALENDAR }
     MaterialTheme(colorScheme = darkColorScheme(
         background = Black, surface = Color(0xFF151515), onBackground = Ink, onSurface = Ink,
@@ -101,7 +112,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
         surfaceContainerLow = Color(0xFF191919), surfaceContainerLowest = Black, surfaceTint = Color.Transparent,
         onSurfaceVariant = Color(0xFFC1BDB7), outline = Color(0xFF8A8680),
         error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
-    )) {
+    ), typography = typography) {
         Surface(color = Black, modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
             if (!state.loaded) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Image(painterResource(R.drawable.ic_payflow), null, modifier = Modifier.size(108.dp))
@@ -202,10 +213,11 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
-    AlertDialog(modifier = Modifier.safeDrawingPadding().imePadding(), properties = DialogProperties(decorFitsSystemWindows = false), onDismissRequest = dismiss, title = { Text(heading) }, text = {
-        FormFields {
-            if (expense) OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true)
-            OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, isError = amount.isNotEmpty() && cents == null)
+    FormEditor(heading, dismiss, action = {
+        TextButton(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text(if (!expense) "Save rate" else if (initial == null) "Add expense" else "Save changes") }
+    }) {
+            if (expense) OutlinedTextField(title, { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(amount, { amount = it }, label = { Text(if (expense) "Amount in DH" else "DH per day") }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, isError = amount.isNotEmpty() && cents == null)
             if (amount.isNotEmpty() && cents == null) Text("Enter a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             OutlinedButton(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small, onClick = {
                 chooseDate = true
@@ -216,8 +228,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
                 }
                 Icon(Icons.Default.CalendarToday, contentDescription = "Choose date", tint = Accent)
             }
-        }
-    }, confirmButton = { Button(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Text(if (!expense) "Save rate" else if (initial == null) "Add expense" else "Save changes") } }, dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
+    }
     if (chooseDate) {
         val picker = rememberDatePickerState(initialSelectedDateMillis = (parsedDate ?: LocalDate.now()).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli())
         DatePickerDialog(onDismissRequest = { chooseDate = false }, confirmButton = {

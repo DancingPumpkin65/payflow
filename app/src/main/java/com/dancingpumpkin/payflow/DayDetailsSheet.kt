@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
 import com.dancingpumpkin.payflow.data.DayEventEntity
 import com.dancingpumpkin.payflow.data.ShopIncomeEntity
 import java.math.BigDecimal
@@ -78,26 +77,25 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
             if (!existing?.notes.isNullOrBlank()) Text(existing!!.notes, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
-    if (editor != null) AlertDialog(
-        modifier = Modifier.safeDrawingPadding().imePadding(), properties = DialogProperties(decorFitsSystemWindows = false),
-        onDismissRequest = { editor = null }, title = { Text(if (editor == "event") "New event" else "Shop income") },
-        text = {
-            FormFields {
-                Text(date.format(DateTimeFormatter.ofPattern("d MMM yyyy")), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (editor == "event") {
-                    OutlinedTextField(title, { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                    OutlinedTextField(eventNotes, { eventNotes = it }, label = { Text("Notes, optional") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-                } else {
-                    OutlinedTextField(amount, { amount = it }, label = { Text("Total in DH") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true, isError = amount.isNotBlank() && cents == null)
-                    if (amount.isNotBlank() && cents == null) Text("Use zero or a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(notes, { notes = it }, label = { Text("Notes, optional") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-                }
-            }
+    if (editor != null) FormEditor(
+        if (editor == "event") "New event" else "Shop income",
+        { editor = null },
+        action = {
+            TextButton(enabled = if (editor == "event") title.isNotBlank() else cents != null, onClick = {
+                if (editor == "event") { model.addEvent(DayEventEntity(date = key, title = title.trim(), notes = eventNotes.trim())); title = ""; eventNotes = "" }
+                else model.saveShopIncome(ShopIncomeEntity(key, cents!!, notes.trim()))
+                editor = null
+            }) { Text(if (editor == "event") "Add event" else "Save income") }
         },
-        confirmButton = { Button(enabled = if (editor == "event") title.isNotBlank() else cents != null, onClick = {
-            if (editor == "event") { model.addEvent(DayEventEntity(date = key, title = title.trim(), notes = eventNotes.trim())); title = ""; eventNotes = "" }
-            else model.saveShopIncome(ShopIncomeEntity(key, cents!!, notes.trim()))
-            editor = null
-        }) { Text(if (editor == "event") "Add event" else "Save income") } }, dismissButton = { TextButton(onClick = { editor = null }) { Text("Cancel") } },
-    )
+    ) {
+        Text(date.format(DateTimeFormatter.ofPattern("d MMM yyyy")), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (editor == "event") {
+            OutlinedTextField(title, { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(eventNotes, { eventNotes = it }, label = { Text("Notes, optional") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+        } else {
+            OutlinedTextField(amount, { amount = it }, label = { Text("Total in DH") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true, isError = amount.isNotBlank() && cents == null)
+            if (amount.isNotBlank() && cents == null) Text("Use zero or a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(notes, { notes = it }, label = { Text("Notes, optional") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+        }
+    }
 }
