@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -41,6 +42,8 @@ import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.DayOfWeek
+import java.time.temporal.WeekFields
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -237,13 +240,15 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState, selectedDate: String, enabled: Boolean, select: (LocalDate) -> Unit, details: (LocalDate) -> Unit) {
+    val locale = Locale.getDefault()
+    val firstDay = WeekFields.of(locale).firstDayOfWeek
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-            listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEach {
-                Text(it, color = CalendarMuted, fontSize = 12.sp, lineHeight = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+            repeat(7) { column ->
+                Text(firstDay.plus(column.toLong()).getDisplayName(TextStyle.SHORT, locale), color = CalendarMuted, fontSize = 12.sp, lineHeight = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }
-        val start = item.atDay(1).minusDays((item.atDay(1).dayOfWeek.value - 1).toLong())
+        val start = item.atDay(1).minusDays(((item.atDay(1).dayOfWeek.value - firstDay.value + 7) % 7).toLong())
         repeat(6) { row ->
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 repeat(7) { column ->
@@ -263,11 +268,11 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                     }, contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(Modifier.size(42.dp).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) CalendarAccent else if (selected) Color(0xFF30291E) else Color.Transparent), contentAlignment = Alignment.Center) {
-                            Text(date.dayOfMonth.toString(), fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
+                        Text(date.dayOfMonth.toString(), fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
                                 isWorked -> Color.Black
                                 date.month != item.month -> Color(0xFF85817B)
                                 today || selected -> CalendarAccent
-                                column >= 5 -> CalendarMuted
+                            date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY -> CalendarMuted
                                 else -> CalendarInk
                             })
                         }
@@ -314,6 +319,12 @@ private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selecte
             }
         }
     }
+    if (showPreview && events.isEmpty() && shop == null) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = enabled, onClick = openDay), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Add, null, tint = CalendarAccent, modifier = Modifier.size(18.dp))
+            Text("Add day details", color = CalendarAccent, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
+        }
+    }
 }
 
 @Composable
@@ -346,7 +357,9 @@ private fun LifetimeTotals(earned: Long, spent: Long, net: Long) {
 
 @Composable
 private fun MiniMonth(month: YearMonth, worked: Set<String>) {
-    val offset = month.atDay(1).dayOfWeek.value - 1
+    val locale = Locale.getDefault()
+    val firstDay = WeekFields.of(locale).firstDayOfWeek
+    val offset = (month.atDay(1).dayOfWeek.value - firstDay.value + 7) % 7
     val fontScale = LocalDensity.current.fontScale
     val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textAlign = android.graphics.Paint.Align.CENTER } }
     // One drawing per thumbnail keeps opening the year from composing 588 tiny Text nodes.
@@ -355,9 +368,9 @@ private fun MiniMonth(month: YearMonth, worked: Set<String>) {
         val rowHeight = size.height / 7
         paint.textSize = 11.sp.toPx()
         val baselineOffset = -(paint.ascent() + paint.descent()) / 2
-        listOf("M", "T", "W", "T", "F", "S", "S").forEachIndexed { column, label ->
+        repeat(7) { column ->
             paint.color = android.graphics.Color.rgb(246, 244, 240)
-            drawContext.canvas.nativeCanvas.drawText(label, columnWidth * (column + 0.5f), rowHeight * 0.5f + baselineOffset, paint)
+            drawContext.canvas.nativeCanvas.drawText(firstDay.plus(column.toLong()).getDisplayName(TextStyle.NARROW, locale), columnWidth * (column + 0.5f), rowHeight * 0.5f + baselineOffset, paint)
         }
         repeat(month.lengthOfMonth()) { index ->
             val slot = index + offset
