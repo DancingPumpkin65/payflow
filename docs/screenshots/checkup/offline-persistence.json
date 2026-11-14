@@ -1,0 +1,18 @@
+{
+  "airplane_mode": true,
+  "tables_preserved_after_force_stop_relaunch": [
+    "work_days",
+    "pay_rates",
+    "expenses",
+    "day_events",
+    "shop_income"
+  ],
+  "record_counts": {
+    "work_days": 2,
+    "pay_rates": 1,
+    "expenses": 1,
+    "day_events": 3,
+    "shop_income": 1
+  },
+  "new_event_persisted": true
+}
