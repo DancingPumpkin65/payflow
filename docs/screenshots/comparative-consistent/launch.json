@@ -1,0 +1,23 @@
+{
+  "package": "com.dancingpumpkin.payflow",
+  "mode": "launch",
+  "serial": "emulator-5554",
+  "sdk": "37",
+  "screen": "Physical size: 1080x2400\r\nOverride size: 1080x2340",
+  "density": "Physical density: 420\r\nOverride density: 480",
+  "font_scale": "1.15",
+  "screencap_size_before_px": [
+    1080,
+    2340
+  ],
+  "video_size_px": [
+    1080,
+    2340
+  ],
+  "capture_size_matches": true,
+  "animator_scale": "null",
+  "apk_sha256": "614f7046be9b60f04d32771a27167561916933f624e8d396c0e768fb83b1976f",
+  "recording_sha256": "a4f7fd7454247f8f8d6fc2ad0bca39c1720f6c476703a23575d1ab1e12b71cec",
+  "source_commit": "8e907bb335b388543680da768fcced95ffdf5ddb",
+  "tracked_app_changes": false
+}
