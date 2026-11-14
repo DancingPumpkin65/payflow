@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.*
@@ -51,6 +52,7 @@ import kotlinx.coroutines.launch
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -93,7 +95,9 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     val yearScroll = rememberScrollState()
     val monthEnabled = !yearMode && !progress.isRunning
     val yearEnabled = yearMode && !progress.isRunning
-    LaunchedEffect(yearMode) { progress.animateTo(if (yearMode) 0f else 1f, tween(320)) }
+    LaunchedEffect(yearMode) {
+        progress.animateTo(if (yearMode) 0f else 1f, tween(if (yearMode) 256 else 320, easing = FastOutSlowInEasing))
+    }
     LaunchedEffect(pager.settledPage) {
         val visible = monthAt(pager.settledPage)
         if (YearMonth.from(LocalDate.parse(selectedDate)) != visible) selectedDate = visible.atDay(1).toString()
@@ -168,8 +172,14 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                     Column(Modifier.fillMaxWidth().height(yearHeight).onGloballyPositioned { yearBounds = Rect(it.positionInRoot(), it.size.toSize()) }.zIndex(if (yearEnabled) 2f else 0f).graphicsLayer { alpha = 1f - progress.value }
                         .then(if (!yearMode) Modifier.clearAndSetSemantics { } else Modifier).verticalScroll(yearScroll, enabled = yearEnabled)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            TextButton(enabled = yearEnabled && year > 1900, onClick = { year-- }) { Text("‹ ${year - 1}", color = CalendarMuted) }
-                            TextButton(enabled = yearEnabled && year < 2099, onClick = { year++ }) { Text("${year + 1} ›", color = CalendarMuted) }
+                            TextButton(enabled = yearEnabled && year > 1900, onClick = { year-- }) {
+                                Icon(Icons.Default.ChevronLeft, null, modifier = Modifier.size(18.dp))
+                                Text((year - 1).toString(), color = CalendarMuted)
+                            }
+                            TextButton(enabled = yearEnabled && year < 2099, onClick = { year++ }) {
+                                Text((year + 1).toString(), color = CalendarMuted)
+                                Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(18.dp))
+                            }
                         }
                         repeat(12 / columns) { row ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -268,7 +278,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                     }, contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(Modifier.size(42.dp).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) CalendarAccent else if (selected) Color(0xFF30291E) else Color.Transparent), contentAlignment = Alignment.Center) {
-                        Text(date.dayOfMonth.toString(), fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
+        Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
                                 isWorked -> Color.Black
                                 date.month != item.month -> Color(0xFF85817B)
                                 today || selected -> CalendarAccent
@@ -361,7 +371,7 @@ private fun MiniMonth(month: YearMonth, worked: Set<String>) {
     val firstDay = WeekFields.of(locale).firstDayOfWeek
     val offset = (month.atDay(1).dayOfWeek.value - firstDay.value + 7) % 7
     val fontScale = LocalDensity.current.fontScale
-    val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textAlign = android.graphics.Paint.Align.CENTER } }
+    val paint = remember { android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { textAlign = android.graphics.Paint.Align.CENTER; fontFeatureSettings = "tnum" } }
     // One drawing per thumbnail keeps opening the year from composing 588 tiny Text nodes.
     Canvas(Modifier.fillMaxWidth().padding(top = 6.dp).height((98 * fontScale).dp)) {
         val columnWidth = size.width / 7
