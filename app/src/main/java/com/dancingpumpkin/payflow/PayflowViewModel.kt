@@ -35,6 +35,8 @@ class PayflowViewModel(application: Application) : AndroidViewModel(application)
     }
     fun setWorkDays(dates: List<String>, worked: Boolean) = viewModelScope.launch { dao.setWorkDays(dates, worked) }
     fun addRate(date: String, amountCents: Long) = viewModelScope.launch { dao.addPayRate(PayRateEntity(effectiveDate = date, dailyAmountCents = amountCents)) }
+    fun updateRate(rate: PayRateEntity) = viewModelScope.launch { dao.updatePayRate(rate) }
+    fun deleteRate(rate: PayRateEntity) = viewModelScope.launch { dao.deletePayRate(rate) }
     fun addExpense(date: String, title: String, amountCents: Long) = viewModelScope.launch { dao.addExpense(ExpenseEntity(date = date, title = title, amountCents = amountCents)) }
     fun deleteExpense(expense: ExpenseEntity) = viewModelScope.launch { dao.deleteExpense(expense) }
     fun updateExpense(expense: ExpenseEntity) = viewModelScope.launch { dao.updateExpense(expense) }

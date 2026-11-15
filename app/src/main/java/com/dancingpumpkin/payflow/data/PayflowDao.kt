@@ -34,6 +34,8 @@ interface PayflowDao {
 
     @Query("SELECT * FROM pay_rates ORDER BY effectiveDate") fun observePayRates(): Flow<List<PayRateEntity>>
     @Insert suspend fun addPayRate(rate: PayRateEntity)
+    @Update suspend fun updatePayRate(rate: PayRateEntity)
+    @Delete suspend fun deletePayRate(rate: PayRateEntity)
 
     @Query("SELECT * FROM expenses ORDER BY date DESC, id DESC") fun observeExpenses(): Flow<List<ExpenseEntity>>
     @Insert suspend fun addExpense(expense: ExpenseEntity)

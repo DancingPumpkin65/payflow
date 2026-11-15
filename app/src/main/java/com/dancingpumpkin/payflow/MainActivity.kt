@@ -48,11 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.rememberDatePickerState
@@ -61,11 +57,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -141,7 +137,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
             savedScreens.SaveableStateProvider(screen.name) {
             when (screen) {
                 Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
-                Destination.RATES -> RatesScreen(state.rates, { destination = Destination.CALENDAR }, viewModel::addRate)
+                Destination.RATES -> RatesScreen(state.rates, { destination = Destination.CALENDAR }, viewModel::addRate, viewModel::updateRate, viewModel::deleteRate)
                 Destination.EXPENSES -> ExpensesScreen(state.expenses, { destination = Destination.CALENDAR }, viewModel::addExpense, viewModel::deleteExpense, viewModel::updateExpense)
             }
             }
@@ -152,21 +148,17 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 }
 
 
-@Composable private fun RatesScreen(rates: List<PayRateEntity>, back: () -> Unit, add: (String, Long) -> Unit) {
+@Composable private fun RatesScreen(rates: List<PayRateEntity>, back: () -> Unit, add: (String, Long) -> Unit, update: (PayRateEntity) -> Unit, delete: (PayRateEntity) -> Unit) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
+    var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    rates.firstOrNull { it.id == editingId }?.let { rate ->
+        MoneyDialog("Edit pay rate", false, null, { date, _, cents -> update(rate.copy(effectiveDate = date, dailyAmountCents = cents)); editingId = null }, { editingId = null }, initialRate = rate)
+    }
     SimpleScreen("Pay rates", back, { showDialog = true }) {
         rates.asReversed().forEach { rate ->
-            Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Effective from", style = MaterialTheme.typography.labelMedium, color = Muted)
-                    Text(displayDate(rate.effectiveDate), style = MaterialTheme.typography.bodyLarge, color = Ink)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(money(rate.dailyAmountCents), style = MaterialTheme.typography.titleMedium, color = Accent)
-                    Text("per day", style = MaterialTheme.typography.labelMedium, color = Muted)
-                }
+            key(rate.id) {
+                RecordCard("${money(rate.dailyAmountCents)} per day", "Effective from ${displayDate(rate.effectiveDate)}", kind = "pay rate", edit = { editingId = rate.id }, delete = { delete(rate) })
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
         if (rates.isEmpty()) Text("Add a daily rate to calculate your pay.", modifier = Modifier.padding(vertical = 24.dp), color = Muted)
     }
@@ -180,24 +172,9 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     var showDialog by rememberSaveable { mutableStateOf(false) }
     SimpleScreen("Expenses", back, { showDialog = true }) {
         expenses.forEach { expense ->
-            var actions by remember { mutableStateOf(false) }
-            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(expense.title, color = Ink, style = MaterialTheme.typography.bodyLarge)
-                        Text(displayDate(expense.date), color = Muted, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text(money(expense.amountCents), color = Accent, style = MaterialTheme.typography.titleMedium)
-                    Box {
-                        IconButton(onClick = { actions = true }) { Icon(Icons.Default.MoreVert, "Actions for ${expense.title}") }
-                        DropdownMenu(expanded = actions, onDismissRequest = { actions = false }) {
-                            DropdownMenuItem(text = { Text("Edit") }, onClick = { actions = false; editingId = expense.id })
-                            DropdownMenuItem(text = { Text("Delete") }, onClick = { actions = false; delete(expense) })
-                        }
-                    }
-                }
+            key(expense.id) {
+                RecordCard(expense.title, displayDate(expense.date), amount = money(expense.amountCents), kind = "expense", edit = { editingId = expense.id }, delete = { delete(expense) })
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
         if (expenses.isEmpty()) Text("No expenses yet.", color = Muted)
     }
@@ -228,10 +205,10 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long) -> Unit, dismiss: () -> Unit) {
-    var date by rememberSaveable { mutableStateOf(initial?.date ?: LocalDate.now().toString()) }
+@Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long) -> Unit, dismiss: () -> Unit, initialRate: PayRateEntity? = null) {
+    var date by rememberSaveable { mutableStateOf(initial?.date ?: initialRate?.effectiveDate ?: LocalDate.now().toString()) }
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
-    var amount by rememberSaveable { mutableStateOf(initial?.let { java.math.BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
+    var amount by rememberSaveable { mutableStateOf((initial?.amountCents ?: initialRate?.dailyAmountCents)?.let { java.math.BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
     val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
