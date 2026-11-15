@@ -266,9 +266,9 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                             }
                         }
                         Column(agendaMotion.padding(horizontal = 12.dp).onSizeChanged { summaryHeight = it.height }) {
-                            DaySummary(state, viewModel, selectedDate, worked, monthEnabled, openRates, ::editEvent)
+                            DaySummary(state, viewModel, selectedDate, worked, monthEnabled, openRates)
                         }
-                        if (state.events.none { it.date == selectedDate }) EmptyEvents(agendaMotion.weight(1f).fillMaxWidth())
+                        DayAgenda(state, viewModel, selectedDate, monthEnabled, ::editEvent, agendaMotion.weight(1f).fillMaxWidth())
                         Spacer(Modifier.height(80.dp))
                         }
                         Column(agendaMotion.padding(horizontal = 12.dp).graphicsLayer { scaleX = savedPulse.value; scaleY = savedPulse.value }.onSizeChanged { totalsHeight = it.height }) {
@@ -394,7 +394,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
 }
 
 @Composable
-private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selectedDate: String, worked: Set<String>, enabled: Boolean, openRates: () -> Unit, edit: (DayEventEntity) -> Unit) {
+private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selectedDate: String, worked: Set<String>, enabled: Boolean, openRates: () -> Unit) {
     val events = state.events.filter { it.date == selectedDate }
     val shop = state.shopIncome.firstOrNull { it.date == selectedDate }
     val rate = state.rates.filter { it.effectiveDate <= selectedDate }.maxByOrNull { it.effectiveDate }
@@ -416,9 +416,17 @@ private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selecte
             })
         }
     }
-    if (!shop?.notes.isNullOrBlank()) Text(shop!!.notes, color = CalendarMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
-    events.forEach { event ->
-        key(event.id) { EventCard(event, enabled = enabled, edit = { edit(event) }, delete = { viewModel.deleteEvent(event) }) }
+}
+
+@Composable
+private fun DayAgenda(state: PayflowState, model: PayflowViewModel, date: String, enabled: Boolean, edit: (DayEventEntity) -> Unit, modifier: Modifier) {
+    val events = state.events.filter { it.date == date }
+    val notes = state.shopIncome.firstOrNull { it.date == date }?.notes.orEmpty()
+    if (events.isEmpty() && notes.isBlank()) EmptyEvents(modifier)
+    else Column(modifier.verticalScroll(rememberScrollState(), enabled = enabled).padding(horizontal = 12.dp)) {
+        if (notes.isNotBlank()) Text(notes, color = CalendarMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
+        events.forEach { event -> key(event.id) { EventCard(event, enabled = enabled, edit = { edit(event) }, delete = { model.deleteEvent(event) }) } }
+        if (events.isEmpty()) EmptyEvents(Modifier.fillMaxWidth().height(112.dp))
     }
 }
 
