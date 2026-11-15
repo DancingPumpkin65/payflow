@@ -23,6 +23,12 @@ interface PayflowDao {
     }
     @Query("SELECT * FROM work_days ORDER BY date") fun observeWorkDays(): Flow<List<WorkDayEntity>>
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun addWorkDay(day: WorkDayEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun addWorkDays(days: List<WorkDayEntity>)
+    @Query("DELETE FROM work_days WHERE date IN (:dates)") suspend fun removeWorkDays(dates: List<String>)
+    @Transaction
+    suspend fun setWorkDays(dates: List<String>, worked: Boolean) {
+        if (worked) addWorkDays(dates.map(::WorkDayEntity)) else removeWorkDays(dates)
+    }
     @Query("DELETE FROM work_days WHERE date = :date") suspend fun removeWorkDay(date: String)
 
     @Query("SELECT * FROM pay_rates ORDER BY effectiveDate") fun observePayRates(): Flow<List<PayRateEntity>>
