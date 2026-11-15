@@ -24,12 +24,12 @@ internal fun RoundedArrow(direction: ArrowDirection, description: String? = null
     }) {
         val w = size.width; val h = size.height
         val path = Path().apply {
-            moveTo(w * .24f, h * .36f)
-            quadraticTo(w * .18f, h * .36f, w * .22f, h * .42f)
-            lineTo(w * .45f, h * .63f)
-            quadraticTo(w * .50f, h * .69f, w * .55f, h * .63f)
-            lineTo(w * .78f, h * .42f)
-            quadraticTo(w * .82f, h * .36f, w * .76f, h * .36f)
+            moveTo(w * .35f, h * .37f)
+            quadraticTo(w * .27f, h * .37f, w * .32f, h * .44f)
+            lineTo(w * .45f, h * .60f)
+            quadraticTo(w * .50f, h * .67f, w * .55f, h * .60f)
+            lineTo(w * .68f, h * .44f)
+            quadraticTo(w * .73f, h * .37f, w * .65f, h * .37f)
             close()
         }
         drawPath(path, color)

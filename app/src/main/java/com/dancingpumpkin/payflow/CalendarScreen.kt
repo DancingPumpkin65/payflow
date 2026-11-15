@@ -38,8 +38,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,20 +114,10 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     val progress = remember { Animatable(if (yearMode) 0f else 1f) }
     val agendaProgress = remember { Animatable(if (yearMode) 0f else 1f) }
     val agendaVisible by remember { derivedStateOf { agendaProgress.value > 0f } }
-    val savedPulse = remember { Animatable(1f) }
-    var hasSavedBaseline by remember { mutableStateOf(false) }
-    LaunchedEffect(state.workDays, state.events, state.shopIncome) {
-        if (hasSavedBaseline) {
-            savedPulse.snapTo(1.02f)
-            savedPulse.animateTo(1f, tween(240, easing = LinearOutSlowInEasing))
-        }
-        hasSavedBaseline = true
-    }
     val thumbnails = remember { mutableMapOf<Int, Rect>() }
     var gridBounds by remember { mutableStateOf(Rect.Zero) }
     var yearBounds by remember { mutableStateOf(Rect.Zero) }
     var summaryHeight by remember { mutableIntStateOf(0) }
-    var totalsHeight by remember { mutableIntStateOf(0) }
     var headerHeight by remember { mutableIntStateOf(0) }
     val yearScroll = rememberScrollState()
     val monthEnabled = !yearMode && !progress.isRunning && !searchOpen
@@ -159,7 +147,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         val weekHeight = with(density) { 14.sp.toDp() } + 8.dp
         val toolbarHeight = with(density) { headerHeight.toDp() }.coerceAtLeast(56.dp)
-        val pageHeight = maxOf(maxHeight, toolbarHeight + weekHeight + 288.dp + 80.dp + with(density) { (summaryHeight + totalsHeight).toDp() })
+        val pageHeight = maxOf(maxHeight, toolbarHeight + weekHeight + 288.dp + 80.dp + with(density) { summaryHeight.toDp() })
         val yearHeight = (maxHeight - toolbarHeight).coerceAtLeast(120.dp)
         fun chooseYear() {
             if (progress.isRunning) return
@@ -269,11 +257,6 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                             DaySummary(state, viewModel, selectedDate, worked, monthEnabled, openRates)
                         }
                         DayAgenda(state, viewModel, selectedDate, monthEnabled, ::editEvent, agendaMotion.weight(1f).fillMaxWidth())
-                        Spacer(Modifier.height(80.dp))
-                        }
-                        Column(agendaMotion.padding(horizontal = 12.dp).graphicsLayer { scaleX = savedPulse.value; scaleY = savedPulse.value }.onSizeChanged { totalsHeight = it.height }) {
-                            val totals = viewModel.totals()
-                            LifetimeTotals(totals.earnedCents, totals.spentCents, totals.netCents)
                         }
                     }
                 }
@@ -282,7 +265,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         if (showActions && monthEnabled) Box(Modifier.fillMaxSize().zIndex(3f).clickable(
             interactionSource = remember { MutableInteractionSource() }, indication = null,
         ) { showActions = false })
-        if (agendaVisible && searchProgress.value < 1f) Box(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(bottom = with(density) { totalsHeight.toDp() } + 16.dp).zIndex(4f).graphicsLayer { alpha = agendaProgress.value * (1f - searchProgress.value); translationY = (1f - agendaProgress.value) * 160.dp.toPx() }, contentAlignment = Alignment.BottomEnd) {
+        if (agendaVisible && searchProgress.value < 1f) Box(Modifier.fillMaxSize().padding(24.dp).zIndex(4f).graphicsLayer { alpha = agendaProgress.value * (1f - searchProgress.value); translationY = (1f - agendaProgress.value) * 160.dp.toPx() }, contentAlignment = Alignment.BottomEnd) {
             EntrySpeedDial(showActions, { if (monthEnabled && !searchOpen) showActions = !showActions }) { destination -> showActions = false; editingEventId = null; editor = destination }
         }
         if (searchOpen && searchQuery.isNotBlank()) {
@@ -423,37 +406,10 @@ private fun DayAgenda(state: PayflowState, model: PayflowViewModel, date: String
     val events = state.events.filter { it.date == date }
     val notes = state.shopIncome.firstOrNull { it.date == date }?.notes.orEmpty()
     if (events.isEmpty() && notes.isBlank()) EmptyEvents(modifier)
-    else Column(modifier.verticalScroll(rememberScrollState(), enabled = enabled).padding(horizontal = 12.dp)) {
+    else Column(modifier.verticalScroll(rememberScrollState(), enabled = enabled).padding(horizontal = 12.dp).padding(bottom = 96.dp)) {
         if (notes.isNotBlank()) Text(notes, color = CalendarMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
         events.forEach { event -> key(event.id) { EventCard(event, enabled = enabled, edit = { edit(event) }, delete = { model.deleteEvent(event) }) } }
         if (events.isEmpty()) EmptyEvents(Modifier.fillMaxWidth().height(112.dp))
-    }
-}
-
-@Composable
-private fun LifetimeTotals(earned: Long, spent: Long, net: Long) {
-    val values = listOf("Earned" to earned, "Spent" to spent, "Net" to net)
-    val measurer = rememberTextMeasurer()
-    val style = MaterialTheme.typography.bodyMedium
-    val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp)) {
-        val columnWidth = with(density) { (maxWidth / 3 - 8.dp).toPx() }
-        val stack = values.any { measurer.measure(AnnotatedString(formatDh(it.second)), style = style).size.width > columnWidth }
-        if (stack) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            values.forEach { (label, amount) ->
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                    Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = style)
-                }
-            }
-        } else Row {
-            values.forEach { (label, amount) ->
-                Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                    Text(label, color = CalendarMuted, style = MaterialTheme.typography.labelSmall)
-                    Text(formatDh(amount), color = if (label == "Net") CalendarAccent else CalendarInk, style = style)
-                }
-            }
-        }
     }
 }
 
