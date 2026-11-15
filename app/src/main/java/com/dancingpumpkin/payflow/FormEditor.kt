@@ -17,20 +17,18 @@ internal fun FormEditor(
     title: String,
     dismiss: () -> Unit,
     action: @Composable () -> Unit,
-    tabs: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = dismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
-                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = dismiss) { Icon(Icons.Default.Close, "Cancel edit") }
                     Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                     action()
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                tabs?.invoke()
-                Column(Modifier.weight(1f).fillMaxWidth().padding(16.dp)) {
+                Column(Modifier.weight(1f).fillMaxWidth().padding(24.dp)) {
                     FormFields(content)
                 }
             }

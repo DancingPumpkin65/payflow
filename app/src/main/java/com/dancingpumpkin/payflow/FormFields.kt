@@ -42,7 +42,7 @@ internal fun FormFields(content: @Composable ColumnScope.() -> Unit) {
                     val top = scroll.value.toFloat() / scroll.maxValue * (size.height - height)
                     drawRoundRect(thumb, Offset(size.width - 2.dp.toPx(), top), Size(2.dp.toPx(), height), CornerRadius(1.dp.toPx()))
                 }
-            }.verticalScroll(scroll).onSizeChanged { contentHeight = it.height }.padding(end = 8.dp),
+            }.verticalScroll(scroll).onSizeChanged { contentHeight = it.height },
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content,
         )

@@ -6,7 +6,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.Notes
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -26,7 +25,7 @@ internal enum class DayEntryTab(val label: String) { EVENT("Event"), INCOME("Sho
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: PayflowViewModel, initialTab: DayEntryTab, dismiss: () -> Unit) {
-    var tab by rememberSaveable { mutableStateOf(initialTab) }
+    val tab = initialTab
     var date by rememberSaveable { mutableStateOf(initialDate.toString()) }
     val existing = state.shopIncome.firstOrNull { it.date == date }
     var title by rememberSaveable { mutableStateOf("") }
@@ -45,19 +44,6 @@ internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: 
                 else model.saveShopIncome(ShopIncomeEntity(date, cents!!, incomeNotes.trim()))
                 dismiss()
             }) { Icon(Icons.Default.Check, if (tab == DayEntryTab.EVENT) "Save event" else "Save shop income") }
-        },
-        tabs = {
-            TabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.background, indicator = { positions ->
-                val position = positions[tab.ordinal]
-                TabRowDefaults.SecondaryIndicator(
-                    Modifier.tabIndicatorOffset(position).padding(horizontal = ((position.width - 88.dp) / 2).coerceAtLeast(0.dp)),
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }) {
-                DayEntryTab.entries.forEach { item ->
-                    Tab(selected = tab == item, onClick = { tab = item }, text = { Text(item.label) })
-                }
-            }
         },
     ) {
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
