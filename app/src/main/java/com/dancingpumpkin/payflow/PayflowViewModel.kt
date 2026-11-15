@@ -39,6 +39,7 @@ class PayflowViewModel(application: Application) : AndroidViewModel(application)
     fun deleteExpense(expense: ExpenseEntity) = viewModelScope.launch { dao.deleteExpense(expense) }
     fun updateExpense(expense: ExpenseEntity) = viewModelScope.launch { dao.updateExpense(expense) }
     fun addEvent(event: DayEventEntity) = viewModelScope.launch { dao.addEvent(event) }
+    fun updateEvent(event: DayEventEntity) = viewModelScope.launch { dao.updateEvent(event) }
     fun deleteEvent(event: DayEventEntity) = viewModelScope.launch { dao.deleteEvent(event) }
     fun saveShopIncome(income: ShopIncomeEntity) = viewModelScope.launch { dao.saveShopIncome(income) }
     fun earnedForMonth(month: String) = IncomeCalculator.earnedForMonth(state.value.workDays, state.value.rates, month)

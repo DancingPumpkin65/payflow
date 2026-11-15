@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 interface PayflowDao {
     @Query("SELECT * FROM day_events ORDER BY date, id") fun observeEvents(): Flow<List<DayEventEntity>>
     @Insert suspend fun addEvent(event: DayEventEntity)
+    @Update suspend fun updateEvent(event: DayEventEntity)
     @Delete suspend fun deleteEvent(event: DayEventEntity)
     @Query("SELECT * FROM shop_income ORDER BY date") fun observeShopIncome(): Flow<List<ShopIncomeEntity>>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun saveShopIncome(income: ShopIncomeEntity)
