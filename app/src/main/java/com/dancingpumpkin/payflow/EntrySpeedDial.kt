@@ -15,16 +15,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 
 /** Both secondary actions travel from the same origin and return to it on dismissal. */
 @Composable
 internal fun EntrySpeedDial(expanded: Boolean, toggle: () -> Unit, open: (DayEntryTab) -> Unit) {
     val progress = remember { Animatable(0f) }
+    val actionsVisible by remember { derivedStateOf { progress.value > 0f } }
     LaunchedEffect(expanded) { progress.animateTo(if (expanded) 1f else 0f, tween(if (expanded) 220 else 176, easing = LinearOutSlowInEasing)) }
     Box(Modifier.width(56.dp).height(192.dp), contentAlignment = Alignment.BottomCenter) {
-        if (progress.value > 0f) listOf(DayEntryTab.EVENT, DayEntryTab.INCOME).forEachIndexed { index, destination ->
+        if (actionsVisible) listOf(DayEntryTab.EVENT, DayEntryTab.INCOME).forEachIndexed { index, destination ->
             Surface(
-                modifier = Modifier.size(48.dp).offset(y = -((2 - index) * 64).dp * progress.value).graphicsLayer {
+                modifier = Modifier.size(48.dp).offset { IntOffset(0, (-((2 - index) * 64).dp.toPx() * progress.value).roundToInt()) }.graphicsLayer {
                     alpha = progress.value
                     scaleX = 0.95f + 0.05f * progress.value
                     scaleY = scaleX
