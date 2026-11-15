@@ -72,7 +72,7 @@ import java.time.format.DateTimeFormatter
 private val Black = Color(0xFF000000)
 private val Ink = Color(0xFFF6F4F0)
 private val Muted = Color(0xFF9C9994)
-private val Accent = Color(0xFFC9A46A)
+private val Accent = Color(0xFF72A7FF)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) = super.onCreate(savedInstanceState).also {
@@ -106,9 +106,9 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     MaterialTheme(colorScheme = darkColorScheme(
         background = Black, surface = Color(0xFF151515), onBackground = Ink, onSurface = Ink,
         surfaceContainer = Color(0xFF1C1C1C), surfaceContainerHigh = Color(0xFF242424), surfaceContainerHighest = Color(0xFF2B2B2B),
-        primary = Accent, onPrimary = Black, secondary = Accent, onSecondary = Black,
-        primaryContainer = Color(0xFF30291E), onPrimaryContainer = Color(0xFFEBD1A8),
-        secondaryContainer = Color(0xFF30291E), onSecondaryContainer = Color(0xFFEBD1A8),
+        primary = Accent, onPrimary = Color(0xFF001B3F), secondary = Accent, onSecondary = Color(0xFF001B3F),
+        primaryContainer = Color(0xFF152B4D), onPrimaryContainer = Color(0xFFD6E3FF),
+        secondaryContainer = Color(0xFF152B4D), onSecondaryContainer = Color(0xFFD6E3FF),
         surfaceContainerLow = Color(0xFF191919), surfaceContainerLowest = Black, surfaceTint = Color.Transparent,
         onSurfaceVariant = Color(0xFFC1BDB7), outline = Color(0xFF8A8680),
         error = Color(0xFFFFB4AB), onError = Color(0xFF690005),

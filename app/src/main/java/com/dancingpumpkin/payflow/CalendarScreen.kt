@@ -6,7 +6,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -17,7 +16,6 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -29,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
@@ -61,8 +58,14 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.dancingpumpkin.payflow.domain.workDayRange
 
-private val CalendarAccent = Color(0xFFC9A46A)
+private val CalendarAccent = Color(0xFF72A7FF)
 private val CalendarInk = Color(0xFFF6F4F0)
 private val CalendarMuted = Color(0xFFA5A19B)
 
@@ -79,10 +82,12 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var year by rememberSaveable { mutableIntStateOf(now.year) }
     var selectedDate by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     var showDay by rememberSaveable { mutableStateOf(false) }
+    var showEditor by rememberSaveable { mutableStateOf(false) }
+    var rangeSelecting by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val columns = if (LocalConfiguration.current.screenWidthDp < 400 || density.fontScale > 1.15f) 2 else 3
+    val columns = 3
     val month = monthAt(pager.currentPage)
     val worked = remember(state.workDays) { state.workDays.map { it.date }.toSet() }
     val progress = remember { Animatable(if (yearMode) 0f else 1f) }
@@ -104,12 +109,12 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     }
     BackHandler(yearMode) { yearMode = false }
     if (showDay) DayDetailsSheet(LocalDate.parse(selectedDate), state, viewModel) { showDay = false }
+    if (showEditor) DayEntryEditor(LocalDate.parse(selectedDate), state, viewModel, DayEntryTab.EVENT) { showEditor = false }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val hintHeight = with(density) { MaterialTheme.typography.labelSmall.lineHeight.toDp() } + 4.dp
         val weekHeight = with(density) { 16.sp.toDp() } + 12.dp
         val toolbarHeight = with(density) { headerHeight.toDp() }.coerceAtLeast(64.dp)
-        val pageHeight = maxOf(maxHeight, toolbarHeight + hintHeight + weekHeight + 288.dp + with(density) { (summaryHeight + totalsHeight).toDp() })
+        val pageHeight = maxOf(maxHeight, toolbarHeight + weekHeight + 288.dp + with(density) { (summaryHeight + totalsHeight).toDp() })
         val yearHeight = (maxHeight - toolbarHeight).coerceAtLeast(120.dp)
         val showPreview = maxHeight >= 680.dp && density.fontScale <= 1.2f
         fun chooseYear() {
@@ -142,7 +147,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
             }
         }
         // Short windows scroll the page instead of compressing date touch targets.
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState(), enabled = !rangeSelecting)) {
             Column(Modifier.fillMaxWidth().height(pageHeight).padding(horizontal = 12.dp)) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).onSizeChanged { headerHeight = it.height }, verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.weight(1f).clickable(onClick = ::chooseYear).heightIn(min = 48.dp).semantics {
@@ -154,13 +159,12 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                         Text(if (yearMode) year.toString() else month.format(DateTimeFormatter.ofPattern("MMM yyyy")), color = CalendarInk, style = MaterialTheme.typography.titleLarge)
                         Icon(if (yearMode) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = CalendarMuted, modifier = Modifier.padding(start = 4.dp).size(20.dp))
                         }
-                        Text(if (yearMode) "Choose a month" else "${formatDh(viewModel.earnedForMonth(month.toString()))} earned this month", color = if (yearMode) CalendarMuted else CalendarAccent, style = MaterialTheme.typography.labelSmall)
                         }
                     }
-                    TextButton(enabled = !progress.isRunning, onClick = ::today) { Text("Today") }
                     Box {
-                        IconButton(onClick = { showMenu = true }) { Icon(Icons.Default.MoreVert, "Menu") }
+                        IconButton(onClick = { showMenu = true }) { CalendarMenuIcon() }
                         DropdownMenu(showMenu, { showMenu = false }) {
+                            DropdownMenuItem(text = { Text("Go to today") }, onClick = { showMenu = false; today() })
                             DropdownMenuItem(text = { Text("Pay rates") }, onClick = { showMenu = false; openRates() })
                             DropdownMenuItem(text = { Text("Expenses") }, onClick = { showMenu = false; openExpenses() })
                         }
@@ -202,7 +206,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                             val count = worked.count { it.startsWith(item.toString()) }
                                             stateDescription = if (count == 1) "1 worked day" else "$count worked days"
                                         }.border(if (item == month) 1.dp else 0.dp, if (item == month) CalendarAccent else Color.Transparent, MaterialTheme.shapes.small).padding(4.dp)) {
-                                        Text(item.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()), color = if (item == month) CalendarAccent else CalendarInk, style = MaterialTheme.typography.labelLarge)
+                                        Text(item.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(Locale.getDefault()), color = if (item == month) CalendarAccent else CalendarInk, style = MaterialTheme.typography.labelLarge)
                                         MiniMonth(item, worked)
                                     }
                                 }
@@ -212,7 +216,6 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                     Column(Modifier.fillMaxSize().zIndex(1f).then(if (yearMode) Modifier.clearAndSetSemantics { } else Modifier)) {
                         val chrome = Modifier.graphicsLayer { alpha = ((progress.value - 0.8f) / 0.2f).coerceIn(0f, 1f) }
                         Column(Modifier.weight(1f)) {
-                        Text("Swipe to change month", color = CalendarMuted, style = MaterialTheme.typography.labelSmall, modifier = chrome.fillMaxWidth().padding(vertical = 2.dp))
                         Box(Modifier.weight(1f, fill = false).heightIn(min = weekHeight + 288.dp, max = weekHeight + 336.dp).fillMaxWidth().onGloballyPositioned { gridBounds = Rect(it.positionInRoot(), it.size.toSize()) }) {
                             Box(Modifier.fillMaxSize().graphicsLayer {
                                 val t = progress.value
@@ -226,19 +229,26 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                                 }
                                 alpha = if (t == 0f) 0f else 1f
                             }.background(Color.Black)) {
-                                HorizontalPager(pager, modifier = Modifier.fillMaxSize(), userScrollEnabled = monthEnabled) { page ->
+                                HorizontalPager(pager, modifier = Modifier.fillMaxSize(), userScrollEnabled = monthEnabled && !rangeSelecting) { page ->
                                     MonthGrid(monthAt(page), worked, state, selectedDate, monthEnabled, { date ->
                                         selectedDate = date.toString()
                                         if (YearMonth.from(date) != monthAt(page)) scope.launch { pager.animateScrollToPage(monthIndex(YearMonth.from(date))) }
-                                    }, { date -> selectedDate = date.toString(); showDay = true })
+                                    }, { dates, mark -> viewModel.setWorkDays(dates, mark) }, { rangeSelecting = it })
                                 }
                             }
                         }
-                        Column(chrome.onSizeChanged { summaryHeight = it.height }) { DaySummary(state, viewModel, selectedDate, worked, monthEnabled, openRates, showPreview) { showDay = true } }
+                        Column(chrome.onSizeChanged { summaryHeight = it.height }) {
+                            DaySummary(state, viewModel, selectedDate, worked, monthEnabled, openRates, showPreview) { showDay = true }
+                        }
                         }
                         Column(chrome.onSizeChanged { totalsHeight = it.height }) {
                             val totals = viewModel.totals()
-                            LifetimeTotals(totals.earnedCents, totals.spentCents, totals.netCents)
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) { LifetimeTotals(totals.earnedCents, totals.spentCents, totals.netCents) }
+                                FloatingActionButton(onClick = { if (monthEnabled) showEditor = true }, modifier = Modifier.padding(start = 8.dp, bottom = 12.dp), shape = CircleShape, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
+                                    Icon(Icons.Default.Add, "Add day entry", modifier = Modifier.size(30.dp))
+                                }
+                            }
                         }
                     }
                 }
@@ -249,37 +259,78 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState, selectedDate: String, enabled: Boolean, select: (LocalDate) -> Unit, details: (LocalDate) -> Unit) {
+private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState, selectedDate: String, enabled: Boolean, select: (LocalDate) -> Unit, commitRange: (List<String>, Boolean) -> Unit, selecting: (Boolean) -> Unit) {
     val locale = Locale.getDefault()
     val firstDay = WeekFields.of(locale).firstDayOfWeek
+    val start = item.atDay(1).minusDays(((item.atDay(1).dayOfWeek.value - firstDay.value + 7) % 7).toLong())
+    val haptics = LocalHapticFeedback.current
+    val currentWorked by rememberUpdatedState(worked)
+    val currentCommit by rememberUpdatedState(commitRange)
+    val currentSelecting by rememberUpdatedState(selecting)
+    var preview by remember(item) { mutableStateOf<Set<String>?>(null) }
+    var dragging by remember(item) { mutableStateOf(false) }
+    LaunchedEffect(worked) { if (!dragging) preview = null }
+    val displayedWorked = preview ?: worked
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
             repeat(7) { column ->
-                Text(firstDay.plus(column.toLong()).getDisplayName(TextStyle.SHORT, locale), color = CalendarMuted, fontSize = 12.sp, lineHeight = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                Text(firstDay.plus(column.toLong()).getDisplayName(TextStyle.SHORT, locale).uppercase(locale), color = CalendarMuted, fontSize = 12.sp, lineHeight = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }
-        val start = item.atDay(1).minusDays(((item.atDay(1).dayOfWeek.value - firstDay.value + 7) % 7).toLong())
+        Column(Modifier.weight(1f).fillMaxWidth().pointerInput(item, enabled) {
+            if (!enabled) return@pointerInput
+            var anchor = start
+            var endpoint = start
+            var mark = true
+            var baseline = emptySet<String>()
+            fun dateAt(position: Offset): LocalDate {
+                val column = (position.x / (size.width / 7f)).toInt().coerceIn(0, 6)
+                val row = (position.y / (size.height / 6f)).toInt().coerceIn(0, 5)
+                return start.plusDays((row * 7 + column).toLong())
+            }
+            fun update() {
+                val range = workDayRange(anchor, endpoint).toSet()
+                preview = if (mark) baseline + range else baseline - range
+            }
+            detectDragGesturesAfterLongPress(
+                onDragStart = {
+                    baseline = currentWorked
+                    anchor = dateAt(it)
+                    endpoint = anchor
+                    mark = anchor.toString() !in baseline
+                    currentSelecting(true)
+                    dragging = true
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    update()
+                },
+                onDrag = { change, _ -> change.consume(); endpoint = dateAt(change.position); update() },
+                onDragEnd = {
+                    currentCommit(workDayRange(anchor, endpoint), mark)
+                    dragging = false
+                    currentSelecting(false)
+                },
+                onDragCancel = { preview = null; dragging = false; currentSelecting(false) },
+            )
+        }) {
         repeat(6) { row ->
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 repeat(7) { column ->
                     val date = start.plusDays((row * 7 + column).toLong())
-                    val isWorked = date.toString() in worked
+                    val isWorked = date.toString() in displayedWorked
                     val today = date == LocalDate.now()
                     val selected = date.toString() == selectedDate
-                    Box(Modifier.weight(1f).fillMaxHeight().combinedClickable(
+                    Box(Modifier.weight(1f).fillMaxHeight().clickable(
                         enabled = enabled, role = Role.Button,
                         onClick = { select(date) },
-                        onLongClickLabel = "Day events and shop income",
-                        onLongClick = { details(date) },
                     ).semantics {
                         contentDescription = date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy"))
                         this.selected = selected
                         stateDescription = listOfNotNull(if (today) "Today" else null, if (isWorked) "Worked" else "Not worked").joinToString(", ")
                     }, contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.size(42.dp).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) CalendarAccent else if (selected) Color(0xFF30291E) else Color.Transparent), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(42.dp).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) MaterialTheme.colorScheme.primary else if (selected) Color(0xFF152B4D) else Color.Transparent), contentAlignment = Alignment.Center) {
         Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
-                                isWorked -> Color.Black
+                                isWorked -> MaterialTheme.colorScheme.onPrimary
                                 date.month != item.month -> Color(0xFF85817B)
                                 today || selected -> CalendarAccent
                             date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY -> CalendarMuted
@@ -292,6 +343,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                     }
                 }
             }
+        }
         }
     }
 }
@@ -327,12 +379,6 @@ private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selecte
                 Text(event.title, color = CalendarInk, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (event.notes.isNotBlank()) Text(event.notes, color = CalendarMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-        }
-    }
-    if (showPreview && events.isEmpty() && shop == null) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = enabled, onClick = openDay), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.Add, null, tint = CalendarAccent, modifier = Modifier.size(18.dp))
-            Text("Add day details", color = CalendarAccent, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
         }
     }
 }
@@ -376,7 +422,7 @@ private fun MiniMonth(month: YearMonth, worked: Set<String>) {
     Canvas(Modifier.fillMaxWidth().padding(top = 6.dp).height((98 * fontScale).dp)) {
         val columnWidth = size.width / 7
         val rowHeight = size.height / 7
-        paint.textSize = 11.sp.toPx()
+        paint.textSize = 10.sp.toPx()
         val baselineOffset = -(paint.ascent() + paint.descent()) / 2
         repeat(7) { column ->
             paint.color = android.graphics.Color.rgb(246, 244, 240)
@@ -384,7 +430,7 @@ private fun MiniMonth(month: YearMonth, worked: Set<String>) {
         }
         repeat(month.lengthOfMonth()) { index ->
             val slot = index + offset
-            paint.color = if (month.atDay(index + 1).toString() in worked) android.graphics.Color.rgb(201, 164, 106) else android.graphics.Color.rgb(165, 161, 155)
+            paint.color = if (month.atDay(index + 1).toString() in worked) android.graphics.Color.rgb(114, 167, 255) else android.graphics.Color.rgb(165, 161, 155)
             drawContext.canvas.nativeCanvas.drawText((index + 1).toString(), columnWidth * (slot % 7 + 0.5f), rowHeight * (slot / 7 + 1.5f) + baselineOffset, paint)
         }
     }

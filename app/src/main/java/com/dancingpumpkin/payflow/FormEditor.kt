@@ -17,6 +17,7 @@ internal fun FormEditor(
     title: String,
     dismiss: () -> Unit,
     action: @Composable () -> Unit,
+    tabs: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Dialog(onDismissRequest = dismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -28,6 +29,7 @@ internal fun FormEditor(
                     action()
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                tabs?.invoke()
                 Column(Modifier.weight(1f).fillMaxWidth().padding(16.dp)) {
                     FormFields(content)
                 }

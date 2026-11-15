@@ -3,7 +3,6 @@ package com.dancingpumpkin.payflow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -14,10 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.dancingpumpkin.payflow.data.DayEventEntity
-import com.dancingpumpkin.payflow.data.ShopIncomeEntity
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.time.LocalDate
@@ -31,11 +27,6 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
     val existing = state.shopIncome.firstOrNull { it.date == key }
     val events = state.events.filter { it.date == key }
     var editor by rememberSaveable(key) { mutableStateOf<String?>(null) }
-    var title by rememberSaveable(key) { mutableStateOf("") }
-    var eventNotes by rememberSaveable(key) { mutableStateOf("") }
-    var amount by rememberSaveable(key) { mutableStateOf(existing?.let { BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
-    var notes by rememberSaveable(key) { mutableStateOf(existing?.notes ?: "") }
-    val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 0..100_000_000_000L }
     ModalBottomSheet(onDismissRequest = dismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -53,7 +44,7 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Events", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                IconButton(onClick = { title = ""; eventNotes = ""; editor = "event" }) { Icon(Icons.Default.Add, "Add event", tint = MaterialTheme.colorScheme.primary) }
+                IconButton(onClick = { editor = "event" }) { Icon(Icons.Default.Add, "Add event", tint = MaterialTheme.colorScheme.primary) }
             }
             if (events.isEmpty()) Text("No events planned", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             events.forEach { event ->
@@ -72,8 +63,6 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
                     Text(existing?.let { DecimalFormat("#,##0.00").format(BigDecimal.valueOf(it.amountCents, 2)) + " DH" } ?: "Not recorded", color = if (existing == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary, style = if (existing == null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleLarge)
                 }
                 IconButton(onClick = {
-                    amount = existing?.let { BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: ""
-                    notes = existing?.notes ?: ""
                     editor = "income"
                 }) { Icon(if (existing == null) Icons.Default.Add else Icons.Default.Edit, if (existing == null) "Add shop income" else "Edit shop income", tint = MaterialTheme.colorScheme.primary) }
             }
@@ -81,25 +70,5 @@ internal fun DayDetailsSheet(date: LocalDate, state: PayflowState, model: Payflo
             if (!existing?.notes.isNullOrBlank()) Text(existing!!.notes, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
-    if (editor != null) FormEditor(
-        if (editor == "event") "New event" else "Shop income",
-        { editor = null },
-        action = {
-            TextButton(enabled = if (editor == "event") title.isNotBlank() else cents != null, onClick = {
-                if (editor == "event") { model.addEvent(DayEventEntity(date = key, title = title.trim(), notes = eventNotes.trim())); title = ""; eventNotes = "" }
-                else model.saveShopIncome(ShopIncomeEntity(key, cents!!, notes.trim()))
-                editor = null
-            }) { Text(if (editor == "event") "Add event" else "Save income") }
-        },
-    ) {
-        Text(date.format(DateTimeFormatter.ofPattern("d MMM yyyy")), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (editor == "event") {
-            OutlinedTextField(title, { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedTextField(eventNotes, { eventNotes = it }, label = { Text("Notes, optional") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-        } else {
-            OutlinedTextField(amount, { amount = it }, label = { Text("Total in DH") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true, isError = amount.isNotBlank() && cents == null)
-            if (amount.isNotBlank() && cents == null) Text("Use zero or a positive amount with up to 2 decimals", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            OutlinedTextField(notes, { notes = it }, label = { Text("Notes, optional") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-        }
-    }
+    if (editor != null) DayEntryEditor(date, state, model, if (editor == "event") DayEntryTab.EVENT else DayEntryTab.INCOME) { editor = null }
 }
