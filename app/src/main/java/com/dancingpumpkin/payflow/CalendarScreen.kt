@@ -147,7 +147,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     BackHandler(showActions) { showActions = false }
     BackHandler(searchOpen) { closeSearch() }
     fun editEvent(event: DayEventEntity) {
-        closeSearch()
+        if (searchOpen) { focusManager.clearFocus(); keyboard?.hide() } else closeSearch()
         yearMode = false
         editingEventId = event.id
         selectedDate = event.date
