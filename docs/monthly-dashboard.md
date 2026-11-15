@@ -2,8 +2,9 @@
 
 Open Dashboard from the calendar's top-right menu. Swipe horizontally to move
 between months. Work pay and Shop revenue are separate views; they are never
-added together. Both subtract recorded expenses to calculate their displayed
-net, so expenses are not implicitly assigned to a separate shop ledger.
+added together. Work pay subtracts Personal expenses; Shop revenue subtracts
+Shop expenses. Choose the ledger from the expense editor
+dropdown. Existing expenses migrate to Personal without changing their values.
 
 - The summary ring draws from zero with a 650ms ease-out animation. Coral is
   spending and teal is the positive remainder. When spending exceeds income,

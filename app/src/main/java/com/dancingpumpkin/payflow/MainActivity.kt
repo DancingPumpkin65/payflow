@@ -16,21 +16,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.Animatable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -91,9 +84,7 @@ class MainActivity : ComponentActivity() {
 private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
 
 @Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
-    val launchOpacity = remember { Animatable(0f) }
     val state by viewModel.state.collectAsState()
-    LaunchedEffect(state.loaded) { if (state.loaded) launchOpacity.animateTo(1f, tween(220, easing = LinearOutSlowInEasing)) }
     var destination by rememberSaveable { mutableStateOf(Destination.CALENDAR) }
     val savedScreens = rememberSaveableStateHolder()
     val typography = remember {
@@ -122,13 +113,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
         error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
     ), typography = typography) {
         Surface(color = Black, modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
-            if (!state.loaded) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(painterResource(R.drawable.ic_payflow), null, modifier = Modifier.size(108.dp))
-                Text("Payflow", style = MaterialTheme.typography.titleLarge, color = Ink)
-                Spacer(Modifier.height(24.dp))
-                CircularProgressIndicator(Modifier.size(24.dp), color = Accent, strokeWidth = 2.dp)
-                Text("Opening your calendar", style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 12.dp))
-            } else Box(Modifier.fillMaxSize().graphicsLayer { alpha = launchOpacity.value }) {
+            Box(Modifier.fillMaxSize()) {
             AnimatedContent(destination, modifier = Modifier.fillMaxSize(), transitionSpec = {
                 val direction = if (targetState == Destination.CALENDAR) -1 else 1
                 (fadeIn(tween(300, easing = LinearOutSlowInEasing)) + slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { direction * it / 12 }) togetherWith
@@ -153,7 +138,7 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     rates.firstOrNull { it.id == editingId }?.let { rate ->
-        MoneyDialog("Edit pay rate", false, null, { date, _, cents -> update(rate.copy(effectiveDate = date, dailyAmountCents = cents)); editingId = null }, { editingId = null }, initialRate = rate)
+        MoneyDialog("Edit pay rate", false, null, { date, _, cents, _ -> update(rate.copy(effectiveDate = date, dailyAmountCents = cents)); editingId = null }, { editingId = null }, initialRate = rate)
     }
     SimpleScreen("Pay rates", back, { showDialog = true }) {
         rates.asReversed().forEach { rate ->
@@ -166,20 +151,20 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
     if (showDialog) RateDialog({ date, amount -> add(date, amount); showDialog = false }, { showDialog = false })
 }
 
-@Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
+@Composable private fun ExpensesScreen(expenses: List<ExpenseEntity>, back: () -> Unit, add: (String, String, Long, String) -> Unit, delete: (ExpenseEntity) -> Unit, update: (ExpenseEntity) -> Unit) {
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     val editing = expenses.firstOrNull { it.id == editingId }
-    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents -> update(record.copy(date = date, title = title, amountCents = cents)); editingId = null }, { editingId = null }) }
+    editing?.let { record -> MoneyDialog("Edit expense", true, record, { date, title, cents, type -> update(record.copy(date = date, title = title, amountCents = cents, category = type)); editingId = null }, { editingId = null }) }
     var showDialog by rememberSaveable { mutableStateOf(false) }
     SimpleScreen("Expenses", back, { showDialog = true }) {
         expenses.forEach { expense ->
             key(expense.id) {
-                RecordCard(expense.title, displayDate(expense.date), amount = money(expense.amountCents), kind = "expense", edit = { editingId = expense.id }, delete = { delete(expense) })
+                RecordCard(expense.title, "${displayDate(expense.date)} · ${if (expense.category == "shop") "Shop" else "Personal"}", amount = money(expense.amountCents), kind = "expense", edit = { editingId = expense.id }, delete = { delete(expense) })
             }
         }
-        if (expenses.isEmpty()) Text("No expenses yet.", color = Muted)
+        if (expenses.isEmpty()) Text("No expenses yet.", color = Muted, modifier = Modifier.padding(top = 16.dp))
     }
-    if (showDialog) ExpenseDialog({ date, title, amount -> add(date, title, amount); showDialog = false }, { showDialog = false })
+    if (showDialog) ExpenseDialog("personal", { date, title, amount, type -> add(date, title, amount, type); showDialog = false }, { showDialog = false })
 }
 
 @Composable private fun SimpleScreen(title: String, back: () -> Unit, add: () -> Unit, content: @Composable () -> Unit) {
@@ -198,15 +183,16 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
 }
 
 @Composable private fun RateDialog(save: (String, Long) -> Unit, dismiss: () -> Unit) {
-    MoneyDialog("Set daily pay", false, null, { date, _, amount -> save(date, amount) }, dismiss)
+    MoneyDialog("Set daily pay", false, null, { date, _, amount, _ -> save(date, amount) }, dismiss)
 }
 
-@Composable private fun ExpenseDialog(save: (String, String, Long) -> Unit, dismiss: () -> Unit) {
-    MoneyDialog("New expense", true, null, save, dismiss)
+@Composable private fun ExpenseDialog(category: String, save: (String, String, Long, String) -> Unit, dismiss: () -> Unit) {
+    MoneyDialog("New expense", true, null, save, dismiss, initialCategory = category)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long) -> Unit, dismiss: () -> Unit, initialRate: PayRateEntity? = null) {
+@Composable private fun MoneyDialog(heading: String, expense: Boolean, initial: ExpenseEntity?, save: (String, String, Long, String) -> Unit, dismiss: () -> Unit, initialRate: PayRateEntity? = null, initialCategory: String = "personal") {
+    var category by rememberSaveable { mutableStateOf(initial?.category ?: initialCategory) }
     var date by rememberSaveable { mutableStateOf(initial?.date ?: initialRate?.effectiveDate ?: LocalDate.now().toString()) }
     var title by rememberSaveable { mutableStateOf(initial?.title ?: "") }
     var amount by rememberSaveable { mutableStateOf((initial?.amountCents ?: initialRate?.dailyAmountCents)?.let { java.math.BigDecimal.valueOf(it, 2).toPlainString() } ?: "") }
@@ -214,8 +200,9 @@ private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
     FormEditor(heading, dismiss, action = { finish ->
-        IconButton(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { finish { save(parsedDate!!.toString(), title.trim(), cents!!) } }) { Icon(Icons.Default.Check, if (!expense) "Save rate" else if (initial == null) "Save expense" else "Save changes") }
+        IconButton(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { finish { save(parsedDate!!.toString(), title.trim(), cents!!, category) } }) { Icon(Icons.Default.Check, if (!expense) "Save rate" else if (initial == null) "Save expense" else "Save changes") }
     }) {
+        if (expense) ExpenseCategoryPicker(category) { category = it }
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val colors = TextFieldDefaults.colors(focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer, errorContainerColor = MaterialTheme.colorScheme.surfaceContainer, focusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant, unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant)

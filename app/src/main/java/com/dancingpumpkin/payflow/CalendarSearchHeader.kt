@@ -32,7 +32,7 @@ internal fun CalendarSearchHeader(active: Boolean, query: String, change: (Strin
     Row(modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = 12.dp, end = 24.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         IconButton(onClick = close) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Close search") }
         Row(Modifier.weight(1f).padding(start = 8.dp).height(48.dp).background(Color(0xFF1C1C1C), RoundedCornerShape(28.dp)).padding(horizontal = 12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        SearchGlyph()
         BasicTextField(query, change, modifier = Modifier.weight(1f).padding(start = 8.dp).focusRequester(focus).semantics { contentDescription = "Search for events" },
             singleLine = true, textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface), cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),

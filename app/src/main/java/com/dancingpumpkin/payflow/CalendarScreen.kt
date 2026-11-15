@@ -34,6 +34,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
@@ -120,8 +122,8 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var summaryHeight by remember { mutableIntStateOf(0) }
     var headerHeight by remember { mutableIntStateOf(0) }
     val yearScroll = rememberScrollState()
-    val monthEnabled = !yearMode && !progress.isRunning && !searchOpen
-    val yearEnabled = yearMode && !progress.isRunning && !searchOpen
+    val monthEnabled = state.loaded && !yearMode && !progress.isRunning && !searchOpen
+    val yearEnabled = state.loaded && yearMode && !progress.isRunning && !searchOpen
     LaunchedEffect(yearMode) {
         showActions = false
         launch { agendaProgress.animateTo(if (yearMode) 0f else 1f, tween(if (yearMode) 256 else 320, easing = if (yearMode) FastOutLinearInEasing else LinearOutSlowInEasing)) }
@@ -185,7 +187,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                         }
                         }
                     }
-                    IconButton(enabled = !searchOpen && !progress.isRunning, onClick = { showActions = false; showMenu = false; searchOpen = true }) { Icon(Icons.Default.Search, "Search events", modifier = Modifier.size(28.dp)) }
+                    IconButton(enabled = !searchOpen && !progress.isRunning, onClick = { showActions = false; showMenu = false; searchOpen = true }) { SearchGlyph("Search events") }
                     Box {
                         IconButton(enabled = !searchOpen, onClick = { showMenu = true }) { CalendarMenuIcon() }
                         CalendarOverflowMenu(showMenu, { showMenu = false }, openRates, openExpenses, openDashboard)
@@ -294,6 +296,13 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
     val currentSelecting by rememberUpdatedState(selecting)
     var preview by remember(item) { mutableStateOf<Set<String>?>(null) }
     var dragging by remember(item) { mutableStateOf(false) }
+    var liquidPair by remember(item) { mutableStateOf<Pair<LocalDate, LocalDate>?>(null) }
+    var liquidEndpoint by remember(item) { mutableStateOf("") }
+    val liquid = remember(item) { Animatable(0f) }
+    LaunchedEffect(liquidPair) {
+        liquid.snapTo(0f)
+        if (liquidPair != null) liquid.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
+    }
     LaunchedEffect(worked) { if (!dragging) preview = null }
     val displayedWorked = preview ?: worked
     Column(Modifier.fillMaxSize()) {
@@ -302,7 +311,19 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                 Text(firstDay.plus(column.toLong()).getDisplayName(TextStyle.SHORT, locale).uppercase(locale), color = CalendarMuted, fontSize = 12.sp, lineHeight = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }
-        Column(Modifier.weight(1f).fillMaxWidth().pointerInput(item, enabled) {
+        Column(Modifier.weight(1f).fillMaxWidth().drawBehind {
+            val tension = kotlin.math.sin(liquid.value.coerceIn(0f, 1f) * Math.PI).toFloat().coerceAtLeast(0f)
+            if (tension > 0f) repeat(6) { row ->
+                repeat(6) { column ->
+                    val date = start.plusDays((row * 7 + column).toLong())
+                    if (liquidPair?.let { (a, b) -> minOf(a, b) == date && maxOf(a, b) == date.plusDays(1) } == true) {
+                        val a = Offset(size.width / 7 * (column + .5f), size.height / 6 * (row + .5f) - 3.dp.toPx())
+                        val b = a + Offset(size.width / 7, 0f)
+                        liquidBridge(a, b, 18.dp.toPx(), 18.dp.toPx(), CalendarAccent.copy(alpha = tension), tension)
+                    }
+                }
+            }
+        }.pointerInput(item, enabled) {
             if (!enabled) return@pointerInput
             var anchor = start
             var endpoint = start
@@ -314,13 +335,15 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                 return start.plusDays((row * 7 + column).toLong())
             }
             fun update() {
-                val range = workDayRange(anchor, endpoint).toSet()
+                val range = workDayRange(anchor, endpoint, item).toSet()
                 preview = if (mark) baseline + range else baseline - range
+                liquidEndpoint = endpoint.toString()
             }
             detectDragGesturesAfterLongPress(
-                onDragStart = {
+                onDragStart = startDrag@{
                     baseline = currentWorked
                     anchor = dateAt(it)
+                    if (YearMonth.from(anchor) != item) return@startDrag
                     endpoint = anchor
                     mark = anchor.toString() !in baseline
                     currentSelecting(true)
@@ -328,20 +351,32 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     update()
                 },
-                onDrag = { change, _ -> change.consume(); endpoint = dateAt(change.position); update() },
+                onDrag = { change, _ ->
+                    if (dragging) {
+                        change.consume()
+                        val next = dateAt(change.position).coerceIn(item.atDay(1), item.atEndOfMonth())
+                        if (next != endpoint) {
+                            val previous = if (next > endpoint) next.minusDays(1) else next.plusDays(1)
+                            liquidPair = previous to next
+                            endpoint = next
+                            update()
+                        }
+                    }
+                },
                 onDragEnd = {
-                    currentCommit(workDayRange(anchor, endpoint), mark)
+                    if (dragging) currentCommit(workDayRange(anchor, endpoint, item), mark)
+                    liquidPair = null
                     dragging = false
                     currentSelecting(false)
                 },
-                onDragCancel = { preview = null; dragging = false; currentSelecting(false) },
+                onDragCancel = { preview = null; liquidPair = null; liquidEndpoint = ""; dragging = false; currentSelecting(false) },
             )
         }) {
         repeat(6) { row ->
             Row(Modifier.fillMaxWidth().weight(1f)) {
                 repeat(7) { column ->
                     val date = start.plusDays((row * 7 + column).toLong())
-                    val isWorked = date.toString() in displayedWorked
+                    val isWorked = YearMonth.from(date) == item && date.toString() in displayedWorked
                     val today = date == LocalDate.now()
                     val selected = date.toString() == selectedDate
                     val interaction = remember { MutableInteractionSource() }
@@ -355,7 +390,11 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                         stateDescription = listOfNotNull(if (today) "Today" else null, if (isWorked) "Worked" else "Not worked").joinToString(", ")
                     }, contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.size(42.dp).then(pressFeedback(interaction)).clip(CircleShape).indication(interaction, ripple(bounded = true)).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) MaterialTheme.colorScheme.primary.copy(alpha = if (date.month != item.month) 0.38f else 1f) else if (selected) Color(0xFF152B4D) else Color.Transparent), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(42.dp).then(pressFeedback(interaction)).graphicsLayer {
+                            val squish = if (liquidPair != null && date.toString() == liquidEndpoint) kotlin.math.sin(liquid.value.coerceIn(0f, 1f) * Math.PI).toFloat() else 0f
+                            scaleX = 1f + .14f * squish
+                            scaleY = 1f - .08f * squish
+                        }.clip(CircleShape).indication(interaction, ripple(bounded = true)).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) MaterialTheme.colorScheme.primary else if (selected) Color(0xFF152B4D) else Color.Transparent), contentAlignment = Alignment.Center) {
         Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
                                 isWorked && date.month != item.month -> CalendarInk.copy(alpha = 0.8f)
                                 isWorked -> MaterialTheme.colorScheme.onPrimary
@@ -394,9 +433,7 @@ private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selecte
         }
         Column(Modifier.padding(start = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Worked", style = MaterialTheme.typography.labelSmall, color = CalendarMuted)
-            Switch(checked = selectedDate in worked, enabled = enabled, onCheckedChange = { viewModel.toggleWorkDay(selectedDate) }, modifier = Modifier.semantics {
-                contentDescription = "Worked on ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMMM yyyy"))}"
-            })
+            LiquidWorkedSwitch(selectedDate in worked, enabled, "Worked on ${LocalDate.parse(selectedDate).format(DateTimeFormatter.ofPattern("d MMMM yyyy"))}") { viewModel.toggleWorkDay(selectedDate) }
         }
     }
 }
