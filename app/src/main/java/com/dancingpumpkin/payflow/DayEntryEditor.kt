@@ -39,14 +39,16 @@ internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: 
     FormEditor(
         title = if (tab == DayEntryTab.EVENT) if (initialEvent == null) "New event" else "Edit event" else "Shop income",
         dismiss = dismiss,
-        action = {
+        action = { finish ->
             IconButton(enabled = valid, onClick = {
-                if (tab == DayEntryTab.EVENT) {
-                    val event = DayEventEntity(id = initialEvent?.id ?: 0, date = date, title = title.trim(), notes = eventNotes.trim())
-                    if (initialEvent == null) model.addEvent(event) else model.updateEvent(event)
+                finish {
+                    if (tab == DayEntryTab.EVENT) {
+                        val event = DayEventEntity(id = initialEvent?.id ?: 0, date = date, title = title.trim(), notes = eventNotes.trim())
+                        if (initialEvent == null) model.addEvent(event) else model.updateEvent(event)
+                    }
+                    else model.saveShopIncome(ShopIncomeEntity(date, cents!!, incomeNotes.trim()))
+                    dismiss()
                 }
-                else model.saveShopIncome(ShopIncomeEntity(date, cents!!, incomeNotes.trim()))
-                dismiss()
             }) { Icon(Icons.Default.Check, if (tab == DayEntryTab.EVENT) "Save event" else "Save shop income") }
         },
     ) {

@@ -22,7 +22,13 @@ import androidx.compose.ui.window.PopupProperties
 @Composable
 internal fun CalendarOverflowMenu(expanded: Boolean, dismiss: () -> Unit, rates: () -> Unit, expenses: () -> Unit) {
     val visibility = remember { MutableTransitionState(false) }
+    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     visibility.targetState = expanded
+    LaunchedEffect(visibility.isIdle, visibility.currentState, pendingAction) {
+        if (visibility.isIdle && !visibility.currentState) {
+            pendingAction?.let { action -> pendingAction = null; action() }
+        }
+    }
     val offset = with(LocalDensity.current) { 52.dp.roundToPx() }
     if (visibility.currentState || visibility.targetState) Popup(
         alignment = Alignment.TopEnd, offset = IntOffset(0, offset), onDismissRequest = dismiss,
@@ -36,7 +42,7 @@ internal fun CalendarOverflowMenu(expanded: Boolean, dismiss: () -> Unit, rates:
                 Column(Modifier.width(184.dp).padding(vertical = 8.dp)) {
                     listOf("Pay rates" to rates, "Expenses" to expenses).forEachIndexed { index, (label, action) ->
                         if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { dismiss(); action() }.padding(horizontal = 20.dp, vertical = 16.dp), contentAlignment = Alignment.CenterStart) {
+                        Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = pendingAction == null) { pendingAction = action; dismiss() }.padding(horizontal = 20.dp, vertical = 16.dp), contentAlignment = Alignment.CenterStart) {
                             Text(label, style = MaterialTheme.typography.bodyLarge)
                         }
                     }

@@ -1,6 +1,8 @@
 package com.dancingpumpkin.payflow
 
 import android.os.Bundle
+import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -131,11 +133,17 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
                 CircularProgressIndicator(Modifier.size(24.dp), color = Accent, strokeWidth = 2.dp)
                 Text("Opening your calendar", style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.padding(top = 12.dp))
             } else Box(Modifier.fillMaxSize().graphicsLayer { alpha = launchOpacity.value }) {
-            savedScreens.SaveableStateProvider(destination.name) {
-            when (destination) {
+            AnimatedContent(destination, modifier = Modifier.fillMaxSize(), transitionSpec = {
+                val direction = if (targetState == Destination.CALENDAR) -1 else 1
+                (fadeIn(tween(300, easing = LinearOutSlowInEasing)) + slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { direction * it / 12 }) togetherWith
+                    (fadeOut(tween(240)) + slideOutHorizontally(tween(240, easing = FastOutSlowInEasing)) { -direction * it / 12 }) using SizeTransform(clip = true, sizeAnimationSpec = { _, _ -> tween(0) })
+            }, label = "Destination") { screen ->
+            savedScreens.SaveableStateProvider(screen.name) {
+            when (screen) {
                 Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
                 Destination.RATES -> RatesScreen(state.rates, { destination = Destination.CALENDAR }, viewModel::addRate)
                 Destination.EXPENSES -> ExpensesScreen(state.expenses, { destination = Destination.CALENDAR }, viewModel::addExpense, viewModel::deleteExpense, viewModel::updateExpense)
+            }
             }
             }
             }
@@ -227,8 +235,8 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
     val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 1..100_000_000_000L }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
-    FormEditor(heading, dismiss, action = {
-        IconButton(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { save(parsedDate!!.toString(), title.trim(), cents!!) }) { Icon(Icons.Default.Check, if (!expense) "Save rate" else if (initial == null) "Save expense" else "Save changes") }
+    FormEditor(heading, dismiss, action = { finish ->
+        IconButton(enabled = parsedDate != null && cents != null && (!expense || title.isNotBlank()), onClick = { finish { save(parsedDate!!.toString(), title.trim(), cents!!) } }) { Icon(Icons.Default.Check, if (!expense) "Save rate" else if (initial == null) "Save expense" else "Save changes") }
     }) {
         Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
