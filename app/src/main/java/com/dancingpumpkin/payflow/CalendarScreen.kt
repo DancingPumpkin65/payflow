@@ -74,6 +74,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.dancingpumpkin.payflow.domain.workDayRange
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.ripple
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import com.dancingpumpkin.payflow.data.DayEventEntity
 
 private val CalendarAccent = Color(0xFF72A7FF)
 private val CalendarInk = Color(0xFFF6F4F0)
@@ -93,6 +97,14 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     val year = 1900 + yearPager.currentPage
     var selectedDate by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     var editor by rememberSaveable { mutableStateOf<DayEntryTab?>(null) }
+    var editingEventId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val searchProgress = remember { Animatable(if (searchOpen) 1f else 0f) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    fun closeSearch() { searchOpen = false; searchQuery = ""; focusManager.clearFocus(); keyboard?.hide() }
+    LaunchedEffect(searchOpen) { searchProgress.animateTo(if (searchOpen) 1f else 0f, tween(if (searchOpen) 220 else 176, easing = LinearOutSlowInEasing)) }
     var showActions by rememberSaveable { mutableStateOf(false) }
     var rangeSelecting by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
@@ -120,8 +132,8 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     var totalsHeight by remember { mutableIntStateOf(0) }
     var headerHeight by remember { mutableIntStateOf(0) }
     val yearScroll = rememberScrollState()
-    val monthEnabled = !yearMode && !progress.isRunning
-    val yearEnabled = yearMode && !progress.isRunning
+    val monthEnabled = !yearMode && !progress.isRunning && !searchOpen
+    val yearEnabled = yearMode && !progress.isRunning && !searchOpen
     LaunchedEffect(yearMode) {
         showActions = false
         launch { agendaProgress.animateTo(if (yearMode) 0f else 1f, tween(if (yearMode) 256 else 320, easing = if (yearMode) FastOutLinearInEasing else LinearOutSlowInEasing)) }
@@ -133,11 +145,20 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
     }
     BackHandler(yearMode) { yearMode = false }
     BackHandler(showActions) { showActions = false }
-    editor?.let { destination -> DayEntryEditor(LocalDate.parse(selectedDate), state, viewModel, destination) { editor = null } }
+    BackHandler(searchOpen) { closeSearch() }
+    fun editEvent(event: DayEventEntity) {
+        closeSearch()
+        yearMode = false
+        editingEventId = event.id
+        selectedDate = event.date
+        pager.requestScrollToPage(monthIndex(YearMonth.from(LocalDate.parse(event.date))))
+        editor = DayEntryTab.EVENT
+    }
+    editor?.let { destination -> DayEntryEditor(LocalDate.parse(selectedDate), state, viewModel, destination, state.events.firstOrNull { it.id == editingEventId }) { editor = null; editingEventId = null } }
 
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
-        val weekHeight = with(density) { 16.sp.toDp() } + 12.dp
-        val toolbarHeight = with(density) { headerHeight.toDp() }.coerceAtLeast(64.dp)
+        val weekHeight = with(density) { 14.sp.toDp() } + 8.dp
+        val toolbarHeight = with(density) { headerHeight.toDp() }.coerceAtLeast(56.dp)
         val pageHeight = maxOf(maxHeight, toolbarHeight + weekHeight + 288.dp + 80.dp + with(density) { (summaryHeight + totalsHeight).toDp() })
         val yearHeight = (maxHeight - toolbarHeight).coerceAtLeast(120.dp)
         fun chooseYear() {
@@ -161,32 +182,25 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                 yearMode = true
             }
         }
-        fun today() {
-            scope.launch {
-                selectedIndex = monthIndex(now)
-                pager.requestScrollToPage(selectedIndex)
-                selectedDate = LocalDate.now().toString()
-                yearMode = false
-            }
-        }
         // Short windows scroll the page instead of compressing date touch targets.
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState(), enabled = !rangeSelecting)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState(), enabled = !rangeSelecting).then(if (searchOpen && searchQuery.isNotBlank()) Modifier.clearAndSetSemantics { } else Modifier)) {
             Column(Modifier.fillMaxWidth().height(pageHeight).padding(horizontal = 12.dp)) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).heightIn(min = 64.dp).onSizeChanged { headerHeight = it.height }, verticalAlignment = Alignment.CenterVertically) {
-                    Row(Modifier.weight(1f).clickable(onClick = ::chooseYear).heightIn(min = 48.dp).semantics {
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp).heightIn(min = 56.dp).onSizeChanged { headerHeight = it.height }.graphicsLayer { alpha = 1f - searchProgress.value; translationY = -12.dp.toPx() * searchProgress.value }.then(if (searchOpen) Modifier.clearAndSetSemantics { } else Modifier), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f).clickable(enabled = !searchOpen, onClick = ::chooseYear).heightIn(min = 48.dp).semantics {
                         role = Role.Button
                         contentDescription = "Choose month and year"
                     }, verticalAlignment = Alignment.CenterVertically) {
                         Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(if (yearMode) year.toString() else month.format(DateTimeFormatter.ofPattern("MMM yyyy")), color = CalendarInk, style = MaterialTheme.typography.titleLarge)
-                        Icon(if (yearMode) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown, null, tint = CalendarMuted, modifier = Modifier.padding(start = 4.dp).size(26.dp))
+                        RoundedArrow(if (yearMode) ArrowDirection.UP else ArrowDirection.DOWN)
                         }
                         }
                     }
+                    IconButton(enabled = !searchOpen && !progress.isRunning, onClick = { showActions = false; showMenu = false; searchOpen = true }) { Icon(Icons.Default.Search, "Search events", modifier = Modifier.size(28.dp)) }
                     Box {
-                        IconButton(onClick = { showMenu = true }) { CalendarMenuIcon() }
-                        CalendarOverflowMenu(showMenu, { showMenu = false }, ::today, openRates, openExpenses)
+                        IconButton(enabled = !searchOpen, onClick = { showMenu = true }) { CalendarMenuIcon() }
+                        CalendarOverflowMenu(showMenu, { showMenu = false }, openRates, openExpenses)
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -252,7 +266,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                             }
                         }
                         Column(agendaMotion.padding(horizontal = 12.dp).onSizeChanged { summaryHeight = it.height }) {
-                            DaySummary(state, viewModel, selectedDate, worked, monthEnabled, openRates)
+                            DaySummary(state, viewModel, selectedDate, worked, monthEnabled, openRates, ::editEvent)
                         }
                         if (state.events.none { it.date == selectedDate }) EmptyEvents(agendaMotion.weight(1f).fillMaxWidth())
                         Spacer(Modifier.height(80.dp))
@@ -268,8 +282,19 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         if (showActions && monthEnabled) Box(Modifier.fillMaxSize().zIndex(3f).clickable(
             interactionSource = remember { MutableInteractionSource() }, indication = null,
         ) { showActions = false })
-        if (agendaVisible) Box(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(bottom = with(density) { totalsHeight.toDp() } + 16.dp).zIndex(4f).graphicsLayer { alpha = agendaProgress.value; translationY = (1f - agendaProgress.value) * 160.dp.toPx() }, contentAlignment = Alignment.BottomEnd) {
-            EntrySpeedDial(showActions, { if (monthEnabled) showActions = !showActions }) { destination -> showActions = false; editor = destination }
+        if (agendaVisible && searchProgress.value < 1f) Box(Modifier.fillMaxSize().padding(horizontal = 24.dp).padding(bottom = with(density) { totalsHeight.toDp() } + 16.dp).zIndex(4f).graphicsLayer { alpha = agendaProgress.value * (1f - searchProgress.value); translationY = (1f - agendaProgress.value) * 160.dp.toPx() }, contentAlignment = Alignment.BottomEnd) {
+            EntrySpeedDial(showActions, { if (monthEnabled && !searchOpen) showActions = !showActions }) { destination -> showActions = false; editingEventId = null; editor = destination }
+        }
+        if (searchOpen && searchQuery.isNotBlank()) {
+            val matches = state.events.filter { it.title.contains(searchQuery.trim(), ignoreCase = true) || it.notes.contains(searchQuery.trim(), ignoreCase = true) }
+            Column(Modifier.fillMaxSize().padding(top = toolbarHeight).background(Color.Black).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 12.dp).zIndex(2f)) {
+                if (matches.isEmpty()) Text("No matching events", color = CalendarMuted, modifier = Modifier.padding(vertical = 20.dp))
+                matches.forEach { event -> key(event.id) { EventCard(event, showDate = true, edit = { editEvent(event) }, delete = { viewModel.deleteEvent(event) }) } }
+            }
+        }
+        if (searchOpen || searchProgress.value > 0f) {
+            CalendarSearchHeader(searchOpen, searchQuery, { searchQuery = it }, ::closeSearch,
+                Modifier.align(Alignment.TopCenter).zIndex(5f).graphicsLayer { alpha = searchProgress.value; translationY = -16.dp.toPx() * (1f - searchProgress.value) })
         }
     }
 }
@@ -289,9 +314,9 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
     LaunchedEffect(worked) { if (!dragging) preview = null }
     val displayedWorked = preview ?: worked
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
             repeat(7) { column ->
-                Text(firstDay.plus(column.toLong()).getDisplayName(TextStyle.SHORT, locale).uppercase(locale), color = CalendarMuted, fontSize = 12.sp, lineHeight = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                Text(firstDay.plus(column.toLong()).getDisplayName(TextStyle.SHORT, locale).uppercase(locale), color = CalendarMuted, fontSize = 12.sp, lineHeight = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
         }
         Column(Modifier.weight(1f).fillMaxWidth().pointerInput(item, enabled) {
@@ -369,7 +394,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
 }
 
 @Composable
-private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selectedDate: String, worked: Set<String>, enabled: Boolean, openRates: () -> Unit) {
+private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selectedDate: String, worked: Set<String>, enabled: Boolean, openRates: () -> Unit, edit: (DayEventEntity) -> Unit) {
     val events = state.events.filter { it.date == selectedDate }
     val shop = state.shopIncome.firstOrNull { it.date == selectedDate }
     val rate = state.rates.filter { it.effectiveDate <= selectedDate }.maxByOrNull { it.effectiveDate }
@@ -393,14 +418,7 @@ private fun DaySummary(state: PayflowState, viewModel: PayflowViewModel, selecte
     }
     if (!shop?.notes.isNullOrBlank()) Text(shop!!.notes, color = CalendarMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 8.dp))
     events.forEach { event ->
-        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.padding(end = 8.dp).size(4.dp).clip(CircleShape).background(CalendarAccent))
-            Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
-                Text(event.title, color = CalendarInk, style = MaterialTheme.typography.bodyMedium)
-                if (event.notes.isNotBlank()) Text(event.notes, color = CalendarMuted, style = MaterialTheme.typography.bodySmall)
-            }
-            IconButton(enabled = enabled, onClick = { viewModel.deleteEvent(event) }) { Icon(Icons.Default.DeleteOutline, "Delete ${event.title}", tint = CalendarMuted) }
-        }
+        key(event.id) { EventCard(event, enabled = enabled, edit = { edit(event) }, delete = { viewModel.deleteEvent(event) }) }
     }
 }
 

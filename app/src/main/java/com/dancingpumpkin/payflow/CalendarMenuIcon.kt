@@ -13,9 +13,9 @@ import androidx.compose.ui.unit.dp
 @Composable
 internal fun CalendarMenuIcon() {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
-    Canvas(Modifier.size(24.dp).semantics { contentDescription = "Menu" }) {
-        for (x in listOf(0.3f, 0.7f)) for (y in listOf(0.3f, 0.7f)) {
-            drawCircle(color, 1.8.dp.toPx(), Offset(size.width * x, size.height * y))
+    Canvas(Modifier.size(28.dp).semantics { contentDescription = "Menu" }) {
+        for (x in listOf(0.25f, 0.75f)) for (y in listOf(0.25f, 0.75f)) {
+            drawCircle(color, 2.dp.toPx(), Offset(size.width * x, size.height * y))
         }
     }
 }
