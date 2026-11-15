@@ -25,23 +25,26 @@ internal enum class DayEntryTab(val label: String) { EVENT("Event"), INCOME("Sho
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: PayflowViewModel, initialTab: DayEntryTab, dismiss: () -> Unit) {
+internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: PayflowViewModel, initialTab: DayEntryTab, initialEvent: DayEventEntity? = null, dismiss: () -> Unit) {
     val tab = initialTab
-    var date by rememberSaveable { mutableStateOf(initialDate.toString()) }
+    var date by rememberSaveable { mutableStateOf(initialEvent?.date ?: initialDate.toString()) }
     val existing = state.shopIncome.firstOrNull { it.date == date }
-    var title by rememberSaveable { mutableStateOf("") }
-    var eventNotes by rememberSaveable { mutableStateOf("") }
+    var title by rememberSaveable { mutableStateOf(initialEvent?.title ?: "") }
+    var eventNotes by rememberSaveable { mutableStateOf(initialEvent?.notes ?: "") }
     var amount by rememberSaveable(date) { mutableStateOf(existing?.let { BigDecimal.valueOf(it.amountCents, 2).toPlainString() } ?: "") }
     var incomeNotes by rememberSaveable(date) { mutableStateOf(existing?.notes ?: "") }
     var chooseDate by rememberSaveable { mutableStateOf(false) }
     val cents = runCatching { amount.replace(',', '.').toBigDecimal().movePointRight(2).longValueExact() }.getOrNull()?.takeIf { it in 0..100_000_000_000L }
     val valid = if (tab == DayEntryTab.EVENT) title.isNotBlank() else cents != null
     FormEditor(
-        title = if (tab == DayEntryTab.EVENT) "New event" else "Shop income",
+        title = if (tab == DayEntryTab.EVENT) if (initialEvent == null) "New event" else "Edit event" else "Shop income",
         dismiss = dismiss,
         action = {
             IconButton(enabled = valid, onClick = {
-                if (tab == DayEntryTab.EVENT) model.addEvent(DayEventEntity(date = date, title = title.trim(), notes = eventNotes.trim()))
+                if (tab == DayEntryTab.EVENT) {
+                    val event = DayEventEntity(id = initialEvent?.id ?: 0, date = date, title = title.trim(), notes = eventNotes.trim())
+                    if (initialEvent == null) model.addEvent(event) else model.updateEvent(event)
+                }
                 else model.saveShopIncome(ShopIncomeEntity(date, cents!!, incomeNotes.trim()))
                 dismiss()
             }) { Icon(Icons.Default.Check, if (tab == DayEntryTab.EVENT) "Save event" else "Save shop income") }
@@ -66,7 +69,7 @@ internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: 
                     Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Date", modifier = Modifier.padding(start = 16.dp).weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("d MMM yyyy")), color = MaterialTheme.colorScheme.onSurface)
-                    Icon(Icons.AutoMirrored.Filled.ArrowRight, "Choose entry date", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    RoundedArrow(ArrowDirection.RIGHT, "Choose entry date")
                 }
             }
         }
