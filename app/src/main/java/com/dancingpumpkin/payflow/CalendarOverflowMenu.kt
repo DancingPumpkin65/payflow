@@ -20,7 +20,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 
 @Composable
-internal fun CalendarOverflowMenu(expanded: Boolean, dismiss: () -> Unit, rates: () -> Unit, expenses: () -> Unit) {
+internal fun CalendarOverflowMenu(expanded: Boolean, dismiss: () -> Unit, rates: () -> Unit, expenses: () -> Unit, dashboard: () -> Unit) {
     val visibility = remember { MutableTransitionState(false) }
     var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     visibility.targetState = expanded
@@ -40,7 +40,7 @@ internal fun CalendarOverflowMenu(expanded: Boolean, dismiss: () -> Unit, rates:
         ) {
             Surface(shape = RoundedCornerShape(24.dp), color = Color(0xFF222326), shadowElevation = 8.dp) {
                 Column(Modifier.width(184.dp).padding(vertical = 8.dp)) {
-                    listOf("Pay rates" to rates, "Expenses" to expenses).forEachIndexed { index, (label, action) ->
+                    listOf("Dashboard" to dashboard, "Pay rates" to rates, "Expenses" to expenses).forEachIndexed { index, (label, action) ->
                         if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                         Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(enabled = pendingAction == null) { pendingAction = action; dismiss() }.padding(horizontal = 20.dp, vertical = 16.dp), contentAlignment = Alignment.CenterStart) {
                             Text(label, style = MaterialTheme.typography.bodyLarge)

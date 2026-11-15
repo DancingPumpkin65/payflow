@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Destination { CALENDAR, RATES, EXPENSES }
+private enum class Destination { CALENDAR, RATES, EXPENSES, DASHBOARD }
 
 @Composable private fun PayflowApp(viewModel: PayflowViewModel = viewModel()) {
     val launchOpacity = remember { Animatable(0f) }
@@ -136,7 +136,8 @@ private enum class Destination { CALENDAR, RATES, EXPENSES }
             }, label = "Destination") { screen ->
             savedScreens.SaveableStateProvider(screen.name) {
             when (screen) {
-                Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES })
+                Destination.CALENDAR -> CalendarScreen(state, viewModel, { destination = Destination.RATES }, { destination = Destination.EXPENSES }, { destination = Destination.DASHBOARD })
+                Destination.DASHBOARD -> DashboardScreen(state) { destination = Destination.CALENDAR }
                 Destination.RATES -> RatesScreen(state.rates, { destination = Destination.CALENDAR }, viewModel::addRate, viewModel::updateRate, viewModel::deleteRate)
                 Destination.EXPENSES -> ExpensesScreen(state.expenses, { destination = Destination.CALENDAR }, viewModel::addExpense, viewModel::deleteExpense, viewModel::updateExpense)
             }

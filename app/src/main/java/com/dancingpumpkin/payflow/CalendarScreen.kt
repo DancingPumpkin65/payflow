@@ -86,7 +86,7 @@ private fun monthAt(index: Int) = YearMonth.of(1900 + index / 12, index % 12 + 1
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit) {
+internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit, openDashboard: () -> Unit) {
     val now = YearMonth.now()
     val pager = rememberPagerState(initialPage = monthIndex(now), pageCount = { 2400 })
     var yearMode by rememberSaveable { mutableStateOf(false) }
@@ -188,7 +188,7 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
                     IconButton(enabled = !searchOpen && !progress.isRunning, onClick = { showActions = false; showMenu = false; searchOpen = true }) { Icon(Icons.Default.Search, "Search events", modifier = Modifier.size(28.dp)) }
                     Box {
                         IconButton(enabled = !searchOpen, onClick = { showMenu = true }) { CalendarMenuIcon() }
-                        CalendarOverflowMenu(showMenu, { showMenu = false }, openRates, openExpenses)
+                        CalendarOverflowMenu(showMenu, { showMenu = false }, openRates, openExpenses, openDashboard)
                     }
                 }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
