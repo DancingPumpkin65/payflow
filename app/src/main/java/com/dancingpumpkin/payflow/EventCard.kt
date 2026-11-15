@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -32,7 +33,7 @@ internal fun EventCard(event: DayEventEntity, showDate: Boolean = false, enabled
             }
         }, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
     ) {
-        Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFF222326), modifier = Modifier.fillMaxWidth().semantics {
+        Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFF222326), modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).semantics {
             customActions = if (enabled) listOf(CustomAccessibilityAction("Delete event") { delete(); true }) else emptyList()
         }.clickable(enabled = enabled, onClickLabel = "Edit event", onClick = edit)) {
             Row(Modifier.padding(horizontal = 16.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
