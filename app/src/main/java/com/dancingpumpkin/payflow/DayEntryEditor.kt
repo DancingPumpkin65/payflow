@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,7 +66,7 @@ internal fun DayEntryEditor(initialDate: LocalDate, state: PayflowState, model: 
                     Icon(Icons.Default.CalendarToday, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Date", modifier = Modifier.padding(start = 16.dp).weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(LocalDate.parse(date).format(DateTimeFormatter.ofPattern("d MMM yyyy")), color = MaterialTheme.colorScheme.onSurface)
-                    Icon(Icons.Default.ChevronRight, "Choose entry date", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.AutoMirrored.Filled.ArrowRight, "Choose entry date", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
