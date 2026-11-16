@@ -9,6 +9,8 @@ import com.dancingpumpkin.payflow.data.PayflowDatabase
 import com.dancingpumpkin.payflow.data.WorkDayEntity
 import com.dancingpumpkin.payflow.data.DayEventEntity
 import com.dancingpumpkin.payflow.data.ShopIncomeEntity
+import com.dancingpumpkin.payflow.data.SavingsGoalEntity
+import com.dancingpumpkin.payflow.data.SavingsTransferEntity
 import com.dancingpumpkin.payflow.domain.IncomeCalculator
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -22,13 +24,22 @@ data class PayflowState(
     val expenses: List<ExpenseEntity> = emptyList(),
     val events: List<DayEventEntity> = emptyList(),
     val shopIncome: List<ShopIncomeEntity> = emptyList(),
+    val goals: List<SavingsGoalEntity> = emptyList(),
+    val transfers: List<SavingsTransferEntity> = emptyList(),
 )
 
 class PayflowViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = PayflowDatabase.create(application).dao()
-    val state = combine(dao.observeWorkDays(), dao.observePayRates(), dao.observeExpenses(), dao.observeEvents(), dao.observeShopIncome()) { days, rates, expenses, events, shop ->
+    private val baseState = combine(dao.observeWorkDays(), dao.observePayRates(), dao.observeExpenses(), dao.observeEvents(), dao.observeShopIncome()) { days, rates, expenses, events, shop ->
         PayflowState(loaded = true, workDays = days, rates = rates, expenses = expenses, events = events, shopIncome = shop)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PayflowState())
+    }
+    val state = combine(baseState, dao.observeGoals(), dao.observeTransfers()) { base, goals, transfers -> base.copy(goals = goals, transfers = transfers) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PayflowState())
+    fun refreshReminders() = viewModelScope.launch { dao.allEvents().forEach { EventReminders.schedule(getApplication(), it) } }
+    fun saveGoal(goal: SavingsGoalEntity) = viewModelScope.launch { dao.saveGoal(goal) }
+    fun deleteGoal(goal: SavingsGoalEntity) = viewModelScope.launch { dao.deleteGoal(goal) }
+    fun saveTransfer(transfer: SavingsTransferEntity) = viewModelScope.launch { if (transfer.id == 0L) dao.addTransfer(transfer) else dao.updateTransfer(transfer) }
+    fun deleteTransfer(transfer: SavingsTransferEntity) = viewModelScope.launch { dao.deleteTransfer(transfer) }
 
     fun toggleWorkDay(date: String) = viewModelScope.launch {
         dao.toggleWorkDay(date)
@@ -37,12 +48,12 @@ class PayflowViewModel(application: Application) : AndroidViewModel(application)
     fun addRate(date: String, amountCents: Long) = viewModelScope.launch { dao.addPayRate(PayRateEntity(effectiveDate = date, dailyAmountCents = amountCents)) }
     fun updateRate(rate: PayRateEntity) = viewModelScope.launch { dao.updatePayRate(rate) }
     fun deleteRate(rate: PayRateEntity) = viewModelScope.launch { dao.deletePayRate(rate) }
-    fun addExpense(date: String, title: String, amountCents: Long, category: String) = viewModelScope.launch { dao.addExpense(ExpenseEntity(date = date, title = title, amountCents = amountCents, category = category)) }
+    fun addExpense(date: String, title: String, amountCents: Long, category: String, spendingCategory: String) = viewModelScope.launch { dao.addExpense(ExpenseEntity(date = date, title = title, amountCents = amountCents, category = category, spendingCategory = spendingCategory)) }
     fun deleteExpense(expense: ExpenseEntity) = viewModelScope.launch { dao.deleteExpense(expense) }
     fun updateExpense(expense: ExpenseEntity) = viewModelScope.launch { dao.updateExpense(expense) }
-    fun addEvent(event: DayEventEntity) = viewModelScope.launch { dao.addEvent(event) }
-    fun updateEvent(event: DayEventEntity) = viewModelScope.launch { dao.updateEvent(event) }
-    fun deleteEvent(event: DayEventEntity) = viewModelScope.launch { dao.deleteEvent(event) }
+    fun addEvent(event: DayEventEntity) = viewModelScope.launch { val id = dao.addEvent(event); EventReminders.schedule(getApplication(), event.copy(id = id)) }
+    fun updateEvent(event: DayEventEntity) = viewModelScope.launch { dao.updateEvent(event); EventReminders.schedule(getApplication(), event) }
+    fun deleteEvent(event: DayEventEntity) = viewModelScope.launch { dao.deleteEvent(event); EventReminders.cancel(getApplication(), event.id) }
     fun saveShopIncome(income: ShopIncomeEntity) = viewModelScope.launch { dao.saveShopIncome(income) }
     fun earnedForMonth(month: String) = IncomeCalculator.earnedForMonth(state.value.workDays, state.value.rates, month)
     fun totals() = IncomeCalculator.totals(state.value.workDays, state.value.rates, state.value.expenses)

@@ -25,7 +25,7 @@ import java.time.format.DateTimeFormatter
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EventCard(event: DayEventEntity, showDate: Boolean = false, enabled: Boolean = true, edit: () -> Unit, delete: () -> Unit) {
-    RecordCard(event.title, if (showDate) LocalDate.parse(event.date).format(DateTimeFormatter.ofPattern("d MMM yyyy")) else null,
+    RecordCard(event.title, listOfNotNull(if (showDate) LocalDate.parse(event.date).format(DateTimeFormatter.ofPattern("d MMM yyyy")) else null, event.time).joinToString(" · ").ifBlank { null },
         notes = event.notes, kind = "event", enabled = enabled, edit = edit, delete = delete)
 }
 

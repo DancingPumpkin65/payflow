@@ -72,6 +72,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import com.dancingpumpkin.payflow.domain.workDayRange
+import com.dancingpumpkin.payflow.domain.liquidGridNeighbors
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.ripple
 import androidx.compose.material.icons.filled.Search
@@ -88,7 +89,7 @@ private fun monthAt(index: Int) = YearMonth.of(1900 + index / 12, index % 12 + 1
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit, openDashboard: () -> Unit) {
+internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, openRates: () -> Unit, openExpenses: () -> Unit, openDashboard: () -> Unit, requestedDate: String? = null, requestedEventId: Long? = null, consumed: () -> Unit = {}) {
     val now = YearMonth.now()
     val pager = rememberPagerState(initialPage = monthIndex(now), pageCount = { 2400 })
     var yearMode by rememberSaveable { mutableStateOf(false) }
@@ -144,7 +145,24 @@ internal fun CalendarScreen(state: PayflowState, viewModel: PayflowViewModel, op
         pager.requestScrollToPage(monthIndex(YearMonth.from(LocalDate.parse(event.date))))
         editor = DayEntryTab.EVENT
     }
-    editor?.let { destination -> DayEntryEditor(LocalDate.parse(selectedDate), state, viewModel, destination, state.events.firstOrNull { it.id == editingEventId }) { editor = null; editingEventId = null } }
+    LaunchedEffect(requestedDate, state.loaded) {
+        if (requestedDate != null && state.loaded) {
+            val date = LocalDate.parse(requestedDate)
+            selectedDate = requestedDate
+            pager.requestScrollToPage(monthIndex(YearMonth.from(date)).coerceIn(0, 2399))
+            yearMode = false
+            if (requestedEventId != null && state.events.any { it.id == requestedEventId }) { editingEventId = requestedEventId; editor = DayEntryTab.EVENT }
+            consumed()
+        }
+    }
+    editor?.let { destination ->
+        val activeId = editingEventId
+        key(destination, activeId) {
+            DayEntryEditor(LocalDate.parse(selectedDate), state, viewModel, destination, state.events.firstOrNull { it.id == activeId }) {
+                if (editor == destination && editingEventId == activeId) { editor = null; editingEventId = null }
+            }
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         val weekHeight = with(density) { 14.sp.toDp() } + 8.dp
@@ -301,7 +319,11 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
     val liquid = remember(item) { Animatable(0f) }
     LaunchedEffect(liquidPair) {
         liquid.snapTo(0f)
-        if (liquidPair != null) liquid.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
+        val pair = liquidPair
+        if (pair != null) {
+            liquid.animateTo(1f, tween(650, easing = FastOutSlowInEasing))
+            if (liquidPair == pair) liquidPair = null
+        }
     }
     LaunchedEffect(worked) { if (!dragging) preview = null }
     val displayedWorked = preview ?: worked
@@ -313,14 +335,12 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
         }
         Column(Modifier.weight(1f).fillMaxWidth().drawBehind {
             val tension = kotlin.math.sin(liquid.value.coerceIn(0f, 1f) * Math.PI).toFloat().coerceAtLeast(0f)
-            if (tension > 0f) repeat(6) { row ->
-                repeat(6) { column ->
-                    val date = start.plusDays((row * 7 + column).toLong())
-                    if (liquidPair?.let { (a, b) -> minOf(a, b) == date && maxOf(a, b) == date.plusDays(1) } == true) {
-                        val a = Offset(size.width / 7 * (column + .5f), size.height / 6 * (row + .5f) - 3.dp.toPx())
-                        val b = a + Offset(size.width / 7, 0f)
-                        liquidBridge(a, b, 18.dp.toPx(), 18.dp.toPx(), CalendarAccent.copy(alpha = tension), tension)
-                    }
+            if (tension > 0f) liquidPair?.let { (from, to) ->
+                val aIndex = java.time.temporal.ChronoUnit.DAYS.between(start, from).toInt()
+                val bIndex = java.time.temporal.ChronoUnit.DAYS.between(start, to).toInt()
+                if (liquidGridNeighbors(aIndex, bIndex) && from.toString() in displayedWorked && to.toString() in displayedWorked) {
+                    fun center(index: Int) = Offset(size.width / 7 * (index % 7 + .5f), size.height / 6 * (index / 7 + .5f) - 3.dp.toPx())
+                    liquidBridge(center(aIndex), center(bIndex), 18.dp.toPx(), 18.dp.toPx(), CalendarAccent.copy(alpha = tension), tension)
                 }
             }
         }.pointerInput(item, enabled) {
@@ -356,8 +376,7 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                         change.consume()
                         val next = dateAt(change.position).coerceIn(item.atDay(1), item.atEndOfMonth())
                         if (next != endpoint) {
-                            val previous = if (next > endpoint) next.minusDays(1) else next.plusDays(1)
-                            liquidPair = previous to next
+                            liquidPair = endpoint to next
                             endpoint = next
                             update()
                         }
@@ -365,7 +384,6 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                 },
                 onDragEnd = {
                     if (dragging) currentCommit(workDayRange(anchor, endpoint, item), mark)
-                    liquidPair = null
                     dragging = false
                     currentSelecting(false)
                 },
@@ -392,8 +410,13 @@ private fun MonthGrid(item: YearMonth, worked: Set<String>, state: PayflowState,
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(Modifier.size(42.dp).then(pressFeedback(interaction)).graphicsLayer {
                             val squish = if (liquidPair != null && date.toString() == liquidEndpoint) kotlin.math.sin(liquid.value.coerceIn(0f, 1f) * Math.PI).toFloat() else 0f
-                            scaleX = 1f + .14f * squish
-                            scaleY = 1f - .08f * squish
+                            val vertical = liquidPair?.let { (a, b) ->
+                                val ai = java.time.temporal.ChronoUnit.DAYS.between(start, a).toInt()
+                                val bi = java.time.temporal.ChronoUnit.DAYS.between(start, b).toInt()
+                                kotlin.math.abs(ai / 7 - bi / 7) > kotlin.math.abs(ai % 7 - bi % 7)
+                            } == true
+                            scaleX = if (vertical) 1f - .08f * squish else 1f + .14f * squish
+                            scaleY = if (vertical) 1f + .14f * squish else 1f - .08f * squish
                         }.clip(CircleShape).indication(interaction, ripple(bounded = true)).then(if (selected) Modifier.border(1.dp, CalendarAccent, CircleShape) else Modifier).padding(3.dp).clip(CircleShape).background(if (isWorked) MaterialTheme.colorScheme.primary else if (selected) Color(0xFF152B4D) else Color.Transparent), contentAlignment = Alignment.Center) {
         Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyLarge, fontSize = 18.sp, fontWeight = if (today) FontWeight.Bold else FontWeight.Normal, color = when {
                                 isWorked && date.month != item.month -> CalendarInk.copy(alpha = 0.8f)
