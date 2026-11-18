@@ -25,11 +25,11 @@ tap to edit or swipe past 80% to delete through the existing shared card.
 
 ## Activity and date ranges
 
-Dashboard's activity action opens a complete Monday-first year overview plus
-a horizontally scrolling, lazy-composed detailed grid. Date targets are 48dp;
-year changes handle leap years and padding outside the year. Tap a date to
-select its calendar month/day; system Back returns to activity. The grid
-retains its scroll position on return.
+Dashboard's activity action opens a compact Monday-first year grid with month
+and weekday guides. Swipe horizontally through its rounded squares; tap a
+square to open its date. The full-size Open date picker and screen-reader date
+actions provide accessible alternatives. Year changes handle leap years and
+padding outside the year. System Back returns to activity and restores scroll.
 
 The date-range action offers trailing 7, 15 and 90 days, or explicit start and
 end dates. Both boundaries are inclusive. Reversed dates show an error instead
@@ -64,7 +64,7 @@ Room version 4 adds spending categories, nullable event time/reminder fields,
 monthly goals and savings transfers. The explicit 3→4 migration preserves
 existing rows; the previous 1→2→3 upgrade path remains registered.
 
-- Host unit tests, lint and debug assembly pass: **23 tests, no failures and no
+- Host unit tests, lint and debug assembly pass: **24 tests, no failures and no
   lint errors**. Existing advisory lint warnings remain.
 - Calculation tests cover inclusive ranges, ledger/category isolation, rate
   history, transfer double-counting, negative/zero goals, leap-year heatmaps,

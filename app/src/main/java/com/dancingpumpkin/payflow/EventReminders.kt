@@ -56,7 +56,7 @@ class EventReminderReceiver : BroadcastReceiver() {
             val db = PayflowDatabase.create(context)
             try {
                 if (intent.action in setOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED, AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED)) {
-                    db.dao().allEvents().forEach { EventReminders.schedule(context, it) }
+                    db.dao().allEvents().forEach { if (it.time != null && it.reminderMinutes != null) EventReminders.schedule(context, it) }
                 } else {
                     val event = db.dao().eventById(intent.getLongExtra("eventId", -1))
                     val due = event?.let { reminderInstant(it, ZoneId.systemDefault()) }

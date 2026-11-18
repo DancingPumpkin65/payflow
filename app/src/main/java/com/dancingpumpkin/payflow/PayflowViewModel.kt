@@ -35,7 +35,7 @@ class PayflowViewModel(application: Application) : AndroidViewModel(application)
     }
     val state = combine(baseState, dao.observeGoals(), dao.observeTransfers()) { base, goals, transfers -> base.copy(goals = goals, transfers = transfers) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PayflowState())
-    fun refreshReminders() = viewModelScope.launch { dao.allEvents().forEach { EventReminders.schedule(getApplication(), it) } }
+    fun refreshReminders() = viewModelScope.launch { dao.allEvents().forEach { if (it.time != null && it.reminderMinutes != null) EventReminders.schedule(getApplication(), it) } }
     fun saveGoal(goal: SavingsGoalEntity) = viewModelScope.launch { dao.saveGoal(goal) }
     fun deleteGoal(goal: SavingsGoalEntity) = viewModelScope.launch { dao.deleteGoal(goal) }
     fun saveTransfer(transfer: SavingsTransferEntity) = viewModelScope.launch { if (transfer.id == 0L) dao.addTransfer(transfer) else dao.updateTransfer(transfer) }
